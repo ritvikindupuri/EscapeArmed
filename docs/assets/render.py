@@ -99,14 +99,14 @@ def diagram() -> str:
 
     labels = []
     bus_in = 418
-    for n, lab in [("docker", "inspect"), ("files", "parse"), ("host", "host facts")]:
+    for n, lab in [("docker", "container config"), ("files", "file contents"), ("host", "host config")]:
         x1, y1 = R(n)
         parts.append(arrow([(x1, y1), (bus_in, y1), (bus_in, P["model"][1]), (L("model")[0] - 2, P["model"][1])]))
         labels.append(pill((x1 + bus_in) / 2, y1, lab))
     parts.append(arrow([R("model"), (L("scan")[0] - 2, P["scan"][1])]))
-    labels.append(pill((R("model")[0] + L("scan")[0]) / 2, P["model"][1], "workload"))
+    labels.append(pill((R("model")[0] + L("scan")[0]) / 2, P["model"][1], "one model"))
     parts.append(arrow([T("catalog"), (P["scan"][0], B("scan")[1] + 2)]))
-    labels.append(pill(P["scan"][0], (T("catalog")[1] + B("scan")[1]) / 2, "fixed versions"))
+    labels.append(pill(P["scan"][0], (T("catalog")[1] + B("scan")[1]) / 2, "known fixes"))
     # scan mode: findings straight to the generator, under the prover lane
     parts.append(arrow([R("scan"), (L("gen")[0] - 2, P["gen"][1])]))
     labels.append(pill(P["prove"][0], P["gen"][1], "findings"))
@@ -114,9 +114,9 @@ def diagram() -> str:
     sx, sy = T("scan")
     parts.append(arrow([(sx, sy), (sx, P["prove"][1]), (L("prove")[0] - 2, P["prove"][1])], accent="live",
                        color=RED, dashed=True))
-    labels.append(pill((sx + L("prove")[0]) / 2, P["prove"][1], "--active", color=RED, border="#FCA5A5"))
+    labels.append(pill((sx + L("prove")[0]) / 2, P["prove"][1], "opt-in proof", color=RED, border="#FCA5A5"))
     parts.append(arrow([T("prove"), (P["target"][0], B("target")[1] + 2)], accent="live", color=RED, dashed=True))
-    labels.append(pill(P["prove"][0], (T("prove")[1] + B("target")[1]) / 2, "docker exec", color=RED,
+    labels.append(pill(P["prove"][0], (T("prove")[1] + B("target")[1]) / 2, "run probes", color=RED,
                        border="#FCA5A5"))
     gx = P["gen"][0]
     parts.append(arrow([R("prove"), (gx, P["prove"][1]), (gx, T("gen")[1] - 2)]))
@@ -132,7 +132,7 @@ def diagram() -> str:
         ("docker", brand_icon("docker"), "Containers", "and images", {}),
         ("files", generic_icon("file"), "Dockerfile", "and compose", {}),
         ("host", brand_icon("linux"), "Linux host", "runc, NVIDIA kit", {}),
-        ("model", generic_icon("model"), "Workload model", "one shape per target", {}),
+        ("model", generic_icon("model"), "Workload model", "one format per target", {}),
         ("scan", generic_icon("scan"), "Scanner", "25 escape rules", {}),
         ("catalog", generic_icon("catalog"), "CVE catalog", "runc, NVIDIA", {}),
         ("target", brand_icon("docker"), "Live container", "your target", {"border": RED, "dashed": True}),
