@@ -96,6 +96,9 @@ Host
 
 ### ea-vulnapp
 
+<p align="center"><img src="assets/screenshots/prove-vulnapp.png" alt="ea-vulnapp prove report" width="80%"></p>
+<p align="center"><b>Figure 1. ea-vulnapp prove report: verdict ESCAPABLE with multiple PROVEN escape paths (prove-vulnapp.txt)</b></p>
+
 **F-01 Container runtime socket mounted (Critical, PROVEN)**
 
 - **Evidence:**
@@ -179,6 +182,9 @@ Host
 
 ### ea-sneaky
 
+<p align="center"><img src="assets/screenshots/prove-sneaky.png" alt="ea-sneaky prove report" width="80%"></p>
+<p align="center"><b>Figure 2. ea-sneaky prove report: cgroup v1 release_agent escape PROVEN without privileged mode (prove-sneaky.txt)</b></p>
+
 **F-08 and F-09 SYS_ADMIN with host cgroup namespace (Critical and High, PROVEN)**
 
 - **Evidence:**
@@ -211,6 +217,9 @@ Host
 - **Remediation:** run as non-root, set `no-new-privileges:true`.
 
 ### ea-hardened
+
+<p align="center"><img src="assets/screenshots/prove-hardened.png" alt="ea-hardened prove report" width="80%"></p>
+<p align="center"><b>Figure 3. ea-hardened prove report: every probe BLOCKED or NA, verdict NO ESCAPE PATH PROVEN (prove-hardened.txt)</b></p>
 
 **No container-level findings.**
 
@@ -267,11 +276,17 @@ BLOCKED  sys-admin                EscapeArmed EA002
 ALLOWED  good-pod
 ```
 
+<p align="center"><img src="assets/screenshots/kyverno-check.png" alt="Kyverno CLI validation output" width="60%"></p>
+<p align="center"><b>Figure 4. Kyverno CLI result: 10 violation pods blocked, 1 hardened pod allowed (kyverno-check.txt)</b></p>
+
 **Falco** (`falco -V` on falcosecurity/falco:0.45.2, [`falco-check.txt`](../examples/falco-check.txt)):
 
 ```text
 /rules/escapearmed.yaml: Ok
 ```
+
+<p align="center"><img src="assets/screenshots/falco-check.png" alt="Falco rule validation output" width="60%"></p>
+<p align="center"><b>Figure 5. Falco validator accepts the generated rules file (falco-check.txt)</b></p>
 
 ## 7. Cleanup Verification
 
