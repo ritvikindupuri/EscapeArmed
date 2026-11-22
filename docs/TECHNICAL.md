@@ -22,7 +22,8 @@ Back to the [README](../README.md).
 
 ## 1. Architecture Internals
 
-![Architecture](assets/architecture.png)
+<p align="center"><img src="assets/architecture.png" alt="EscapeArmed system architecture" width="100%"></p>
+<p align="center"><b>Figure 1. EscapeArmed system architecture</b></p>
 
 | Module | Role |
 |---|---|

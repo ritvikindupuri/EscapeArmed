@@ -10,6 +10,8 @@ import re
 
 import cairosvg
 
+from diagram_kit import CARD_H, CARD_W, FONT, arrow, band, card, defs, legend, pill
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ICONS = os.path.join(HERE, "icons")
 BRAND = {"docker": "#2496ED", "kubernetes": "#326CE5", "github": "#181717", "linux": "#222222"}
@@ -30,6 +32,8 @@ GENERIC = {
     "gen": '<circle cx="12" cy="12" r="3.2" fill="none" stroke="#7C3AED" stroke-width="1.8"/>'
            '<path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" stroke="#7C3AED" stroke-width="1.8" stroke-linecap="round"/>'
            '<circle cx="12" cy="12" r="7" fill="none" stroke="#7C3AED" stroke-width="1.8"/>',
+    "model": '<path d="M12 3l9 4.5-9 4.5-9-4.5z" fill="none" stroke="#0EA5E9" stroke-width="1.7" stroke-linejoin="round"/>'
+             '<path d="M3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" fill="none" stroke="#1E3A8A" stroke-width="1.7" stroke-linejoin="round"/>',
     "report": '<rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="#475569" stroke-width="1.6"/>'
               '<path d="M8 15v2M12 11v6M16 8v9" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>',
 }
@@ -53,91 +57,106 @@ def generic_icon(name: str) -> str:
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">{GENERIC[name]}</svg>'
 
 
-W, H = 1640, 960
-CARD_W, CARD_H = 210, 150
-FONT = "DejaVu Sans"
 
-# (id, x_center, y_center, icon svg, title, subtitle, dashed)
-NODES = [
-    ("docker", 160, 310, brand_icon("docker"), "Containers", "and images", False),
-    ("files", 160, 510, generic_icon("file"), "Dockerfile", "and compose", False),
-    ("host", 160, 710, brand_icon("linux"), "Linux host", "runc, toolkit", False),
-    ("scan", 490, 430, generic_icon("scan"), "Scanner", "25 rules", False),
-    ("catalog", 490, 690, generic_icon("catalog"), "CVE catalog", "runc, NVIDIA", False),
-    ("prove", 820, 430, generic_icon("prove"), "Canary prover", "opt in, --active", True),
-    ("gen", 1150, 510, generic_icon("gen"), "Generator", "policy and reports", False),
-    ("report", 1480, 240, generic_icon("report"), "Report", "text and JSON", False),
-    ("github", 1480, 420, brand_icon("github"), "Code scanning", "SARIF", False),
-    ("kyverno", 1480, 600, brand_icon("kyverno"), "Kyverno", "admission policy", False),
-    ("falco", 1480, 780, brand_icon("falco"), "Falco", "runtime rules", False),
-]
-EDGES = [("docker", "scan"), ("files", "scan"), ("host", "scan"), ("scan", "prove"),
-         ("prove", "gen"), ("gen", "report"), ("gen", "github"), ("gen", "kyverno"), ("gen", "falco")]
-COLUMNS = [(160, "INPUTS"), (490, "ANALYZE"), (820, "PROVE"), (1150, "GENERATE"), (1480, "ENFORCE AND REPORT")]
+W, H = 1960, 1190
+RED = "#DC2626"
+ACCENTS = {"flow": "#94A3B8", "live": RED}
+
+# id: (cx, cy)
+P = {
+    "docker": (170, 440), "files": (170, 630), "host": (170, 820),
+    "model": (545, 630), "scan": (850, 630), "catalog": (850, 865),
+    "target": (1170, 225), "prove": (1170, 430),
+    "gen": (1470, 630),
+    "report": (1810, 330), "github": (1810, 530), "kyverno": (1810, 730), "falco": (1810, 930),
+}
+HW, HH = CARD_W / 2, CARD_H / 2
 
 
-def card(n) -> str:
-    nid, cx, cy, icon, title, sub, dashed = n
-    x, y = cx - CARD_W / 2, cy - CARD_H / 2
-    dash = ' stroke-dasharray="8 6"' if dashed else ""
-    stroke = "#DC2626" if dashed else "#CBD5E1"
-    out = [f'<rect x="{x}" y="{y}" width="{CARD_W}" height="{CARD_H}" rx="16" fill="#FFFFFF" '
-           f'stroke="{stroke}" stroke-width="2"{dash} filter="url(#shadow)"/>',
-           f'<image x="{cx - 32}" y="{y + 18}" width="64" height="64" href="{png_uri(icon, 128)}"/>',
-           f'<text x="{cx}" y="{y + 108}" text-anchor="middle" font-family="{FONT}" font-size="19" '
-           f'font-weight="bold" fill="#0F172A">{title}</text>',
-           f'<text x="{cx}" y="{y + 132}" text-anchor="middle" font-family="{FONT}" font-size="14" '
-           f'fill="#64748B">{sub}</text>']
-    return "\n".join(out)
+def L(n):
+    return P[n][0] - HW, P[n][1]
 
 
-def edge(a, b, pos) -> str:
-    _, ax, ay, *_ = pos[a]
-    _, bx, by, *_ = pos[b]
-    x1, x2 = ax + CARD_W / 2, bx - CARD_W / 2 - 6
-    if a == "catalog":
-        return ""
-    return (f'<path d="M{x1} {ay} C{x1 + 60} {ay}, {x2 - 60} {by}, {x2} {by}" fill="none" '
-            f'stroke="#94A3B8" stroke-width="2.5" marker-end="url(#arrow)"/>')
+def R(n):
+    return P[n][0] + HW, P[n][1]
+
+
+def T(n):
+    return P[n][0], P[n][1] - HH
+
+
+def B(n):
+    return P[n][0], P[n][1] + HH
 
 
 def diagram() -> str:
-    pos = {n[0]: n for n in NODES}
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">',
-             '<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" '
-             'orient="auto"><path d="M0 0L10 5L0 10z" fill="#94A3B8"/></marker>'
-             '<filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="3" '
-             'stdDeviation="4" flood-color="#0F172A" flood-opacity="0.12"/></filter></defs>',
-             f'<rect width="{W}" height="{H}" fill="#F8FAFC"/>',
-             f'<text x="{W / 2}" y="58" text-anchor="middle" font-family="{FONT}" font-size="28" '
-             f'font-weight="bold" fill="#0F172A">Figure 1. EscapeArmed System Architecture</text>']
-    for cx, label in COLUMNS:
-        parts.append(f'<text x="{cx}" y="112" text-anchor="middle" font-family="{FONT}" font-size="14" '
-                     f'font-weight="bold" letter-spacing="2" fill="#94A3B8">{label}</text>')
-    for a, b in EDGES:
-        parts.append(edge(a, b, pos))
-    # catalog feeds the scanner from below
-    _, sx, sy, *_ = pos["scan"]
-    _, kx, ky, *_ = pos["catalog"]
-    parts.append(f'<path d="M{kx} {ky - CARD_H / 2} L{sx} {sy + CARD_H / 2 + 6}" stroke="#94A3B8" '
-                 f'stroke-width="2.5" marker-end="url(#arrow)"/>')
-    # docker exec link: prover reaches into the target container
-    _, px, py, *_ = pos["prove"]
-    parts.append(f'<text x="{px}" y="{py + CARD_H / 2 + 34}" text-anchor="middle" font-family="{FONT}" '
-                 f'font-size="14" fill="#DC2626">docker exec, read only canaries</text>')
-    parts.append(f'<text x="{(sx + px) / 2}" y="{sy - 14}" text-anchor="middle" font-family="{FONT}" '
-                 f'font-size="13" fill="#64748B">findings</text>')
-    for n in NODES:
-        parts.append(card(n))
-    # Kyverno runs on Kubernetes: small badge in the card corner
-    _, yx, yy, *_ = pos["kyverno"]
-    parts.append(f'<image x="{yx + CARD_W / 2 - 40}" y="{yy - CARD_H / 2 + 12}" width="28" height="28" '
-                 f'href="{png_uri(brand_icon("kubernetes"), 64)}"/>')
-    # Docker badge on the prover: it works through the Docker API
-    _, px2, py2, *_ = pos["prove"]
-    parts.append(f'<image x="{px2 + CARD_W / 2 - 40}" y="{py2 - CARD_H / 2 + 12}" width="28" height="28" '
-                 f'href="{png_uri(brand_icon("docker"), 64)}"/>')
-    parts.append(f'<text x="{W / 2}" y="{H - 28}" text-anchor="middle" font-family="{FONT}" font-size="13" '
+             defs(ACCENTS), f'<rect width="{W}" height="{H}" fill="#FFFFFF"/>']
+    top, bh = 40, 1000
+    for x, w, title in [(50, 240, "INPUTS"), (360, 650, "ANALYZE"), (1050, 240, "PROVE"),
+                        (1350, 240, "GENERATE"), (1670, 280, "ENFORCE AND REPORT")]:
+        parts.append(band(x, top, w, bh, title))
+
+    labels = []
+    bus_in = 418
+    for n, lab in [("docker", "inspect"), ("files", "parse"), ("host", "host facts")]:
+        x1, y1 = R(n)
+        parts.append(arrow([(x1, y1), (bus_in, y1), (bus_in, P["model"][1]), (L("model")[0] - 2, P["model"][1])]))
+        labels.append(pill((x1 + bus_in) / 2, y1, lab))
+    parts.append(arrow([R("model"), (L("scan")[0] - 2, P["scan"][1])]))
+    labels.append(pill((R("model")[0] + L("scan")[0]) / 2, P["model"][1], "workload"))
+    parts.append(arrow([T("catalog"), (P["scan"][0], B("scan")[1] + 2)]))
+    labels.append(pill(P["scan"][0], (T("catalog")[1] + B("scan")[1]) / 2, "fixed versions"))
+    # scan mode: findings straight to the generator, under the prover lane
+    parts.append(arrow([R("scan"), (L("gen")[0] - 2, P["gen"][1])]))
+    labels.append(pill(P["prove"][0], P["gen"][1], "findings"))
+    # prove mode
+    sx, sy = T("scan")
+    parts.append(arrow([(sx, sy), (sx, P["prove"][1]), (L("prove")[0] - 2, P["prove"][1])], accent="live",
+                       color=RED, dashed=True))
+    labels.append(pill((sx + L("prove")[0]) / 2, P["prove"][1], "--active", color=RED, border="#FCA5A5"))
+    parts.append(arrow([T("prove"), (P["target"][0], B("target")[1] + 2)], accent="live", color=RED, dashed=True))
+    labels.append(pill(P["prove"][0], (T("prove")[1] + B("target")[1]) / 2, "docker exec", color=RED,
+                       border="#FCA5A5"))
+    gx = P["gen"][0]
+    parts.append(arrow([R("prove"), (gx, P["prove"][1]), (gx, T("gen")[1] - 2)]))
+    labels.append(pill((R("prove")[0] + gx) / 2 - 10, P["prove"][1], "proof"))
+    bus_out = 1615
+    for n, lab in [("report", "JSON"), ("github", "SARIF"), ("kyverno", "policy"), ("falco", "rules")]:
+        y = P[n][1]
+        parts.append(arrow([R("gen"), (bus_out, P["gen"][1]), (bus_out, y), (L(n)[0] - 2, y)]))
+        labels.append(pill((bus_out + L(n)[0]) / 2, y, lab))
+
+    k = brand_icon("kubernetes")
+    cards = [
+        ("docker", brand_icon("docker"), "Containers", "and images", {}),
+        ("files", generic_icon("file"), "Dockerfile", "and compose", {}),
+        ("host", brand_icon("linux"), "Linux host", "runc, NVIDIA kit", {}),
+        ("model", generic_icon("model"), "Workload model", "one shape per target", {}),
+        ("scan", generic_icon("scan"), "Scanner", "25 escape rules", {}),
+        ("catalog", generic_icon("catalog"), "CVE catalog", "runc, NVIDIA", {}),
+        ("target", brand_icon("docker"), "Live container", "your target", {"border": RED, "dashed": True}),
+        ("prove", generic_icon("prove"), "Canary prover", "opt in only", {"border": RED, "dashed": True}),
+        ("gen", generic_icon("gen"), "Generator", "verdict and outputs", {}),
+        ("report", generic_icon("report"), "Report", "CI exit code gate", {}),
+        ("github", brand_icon("github"), "Code scanning", "SARIF alerts", {}),
+        ("kyverno", brand_icon("kyverno"), "Kyverno", "blocks risky pods", {"badge_svg": k}),
+        ("falco", brand_icon("falco"), "Falco", "runtime alerts", {}),
+    ]
+    for n, icon, title, sub, kw in cards:
+        parts.append(card(*P[n], icon, title, sub, **kw))
+    parts.extend(labels)
+
+    leg, end = legend(0, 0, [
+        ("line", ("#94A3B8", False, "flow"), "data flow"),
+        ("line", (RED, True, "live"), "live probe, opt in"),
+        ("card", (RED, True), "touches a live target"),
+        ("icon", generic_icon("scan"), "EscapeArmed component"),
+        ("icon", brand_icon("docker"), "external product"),
+    ])
+    lx = (W - end + 44) / 2
+    parts.append(f'<g transform="translate({lx} 1090)">{leg}</g>')
+    parts.append(f'<text x="{W / 2}" y="{H - 24}" text-anchor="middle" font-family="{FONT}" font-size="13" '
                  f'fill="#94A3B8">Docker, Kubernetes, GitHub and Linux icons: Simple Icons (CC0). '
                  f'Falco and Kyverno icons: CNCF artwork.</text>')
     parts.append("</svg>")

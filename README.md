@@ -58,6 +58,7 @@ The diagram shows how a target moves through EscapeArmed, from input to enforcem
 <p align="center">
   <img src="docs/assets/architecture.png" alt="EscapeArmed system architecture" width="100%">
 </p>
+<p align="center"><b>Figure 1. EscapeArmed system architecture: inputs flow through analysis, optional live proof and generation into enforcement and reports</b></p>
 
 1. **Collect.** EscapeArmed reads the target: `docker inspect` for containers, config and saved layers for images, the file itself for Dockerfiles and compose files, and engine, runc and NVIDIA toolkit facts for the host.
 2. **Normalize.** Every input becomes the same workload model: privilege, capabilities, mounts, namespaces, security profiles, user, environment and GPU use.
