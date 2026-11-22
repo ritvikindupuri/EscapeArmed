@@ -33,6 +33,7 @@ Most scanners stop at "SYS_ADMIN, medium". EscapeArmed showed a container with n
 - **Image layer forensics.** Flags `/dev` symlinks, procfs symlinks and device nodes shipped inside image layers, the setup step for the runc mount races.
 - **Active canary proof.** 12 probes: runtime API access, host write through bind mounts (verified from the host side with a random token), host file read, `/proc/1/root`, `core_pattern`, `sysrq-trigger`, `mount(2)`, cgroup release_agent, raw disk read, kernel module capability, effective capabilities and the `LD_PRELOAD` trigger.
 - **Safety by design.** Two required flags plus a typed confirmation, no writes to kernel knobs, read-only runtime API call, automatic cleanup of canaries and scratch mounts, and a cleanup line in every report.
+- **Assessment ready evidence.** The demo run is written up as a formal [security assessment report](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md).
 - **Clear verdict.** `ESCAPABLE`, `AT RISK` or `NO ESCAPE PATH PROVEN`, and each finding is tagged `[PROVEN]`, `[LIKELY]` or `[BLOCKED]`.
 - **Admission policy.** Generates Kyverno `ValidatingPolicy` (CEL) for only what was found, or every rule with `--all`. Verified with the Kyverno CLI v1.20.0.
 - **Runtime detection.** Generates self-contained Falco rules, tailored to the mount paths that were found. Verified with `falco -V` on Falco 0.45.2.
@@ -491,6 +492,7 @@ KEEP=1 ./demo/run-demo.sh   # same, but leaves the containers running
 ```
 
 - Writes every report and artifact to `examples/`, then checks that no canary file or scratch mount was left on the host.
+- The results of the committed run are written up in the [demo security assessment report](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md).
 
 ## Safety Note on Active Mode
 
@@ -514,6 +516,10 @@ KEEP=1 ./demo/run-demo.sh   # same, but leaves the containers running
 Full internals, every rule with its rationale and CVE mapping, probe design and safety guarantees, output formats, limitations and testing:
 
 **[https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/TECHNICAL.md](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/TECHNICAL.md)**
+
+Formal security assessment of the demo run (executive summary, scope, findings with evidence, policy validation, cleanup verification):
+
+**[https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md)**
 
 ## License
 
