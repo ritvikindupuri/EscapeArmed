@@ -17,55 +17,70 @@
 
 ## Overview
 
-EscapeArmed is a container escape readiness scanner and prover. It looks at how a workload actually runs and answers one question: can this container reach the host?
+EscapeArmed answers one question about a container: **can it reach the host?**
 
-- **It finds the primitives.** Privileged mode, dangerous capabilities, mounted runtime sockets, host path mounts, shared host namespaces, disabled AppArmor or seccomp, host cgroup namespaces, root without user namespaces, and the image and Dockerfile setups behind the November 2025 runc escapes and NVIDIAScape.
-- **It proves them.** With explicit opt in, it runs harmless canary probes inside a container you own and reports which escape steps really work on this host, instead of guessing from version numbers.
-- **It closes the gap.** Findings become a Kyverno `ValidatingPolicy` that blocks the primitives at admission, Falco rules that alert on the escape behavior at runtime, and SARIF for GitHub code scanning and CI.
+It does this in three steps:
 
-Most scanners stop at "SYS_ADMIN, medium". EscapeArmed showed a container with no privileged flag, no socket and no host mounts to be escapable through the cgroup release_agent path, and showed a hardened container to be blocked on every probe. That evidence is what makes a finding actionable.
+- **Find.** It reads how a workload runs (a live container, an image, a Dockerfile, a compose file, or the host) and flags escape primitives: privileged mode, dangerous capabilities, mounted runtime sockets, host path mounts, shared host namespaces, disabled AppArmor or seccomp, host cgroup namespaces, root without user namespaces, and the setups behind the November 2025 runc escapes and NVIDIAScape.
+- **Prove.** If you opt in, it runs harmless canary probes inside a container you own and reports which escape steps actually work on this host, instead of guessing from version numbers.
+- **Fix.** It turns the findings into a Kyverno policy that blocks them at admission, Falco rules that alert on them at runtime, and SARIF for GitHub code scanning and CI.
+
+**Why proof matters.** A config-only scanner sees "SYS_ADMIN" and says medium. In the demo, EscapeArmed proved that a container with no privileged flag, no socket and no host mounts could still escape through the cgroup release_agent path. It also proved that a hardened container blocked every probe. That is the evidence a finding needs before someone acts on it.
 
 ## Key Features
 
-- **Five scan targets.** Running containers, images (including a layer walk), Dockerfiles, compose files and the container host.
-- **25 detection rules** with severities, remediation text and CVE mapping. Run `escapearmed rules` to list them.
-- **CVE coverage for 2025 escapes.** runc CVE-2025-31133, CVE-2025-52565 and CVE-2025-52881, and NVIDIA Container Toolkit CVE-2025-23266 (NVIDIAScape).
-- **Image layer forensics.** Flags `/dev` symlinks, procfs symlinks and device nodes shipped inside image layers, the setup step for the runc mount races.
-- **Active canary proof.** 12 probes: runtime API access, host write through bind mounts (verified from the host side with a random token), host file read, `/proc/1/root`, `core_pattern`, `sysrq-trigger`, `mount(2)`, cgroup release_agent, raw disk read, kernel module capability, effective capabilities and the `LD_PRELOAD` trigger.
-- **Safety by design.** Two required flags plus a typed confirmation, no writes to kernel knobs, read-only runtime API call, automatic cleanup of canaries and scratch mounts, and a cleanup line in every report.
-- **Assessment ready evidence.** The demo run is written up as a formal [security assessment report](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md).
-- **Clear verdict.** `ESCAPABLE`, `AT RISK` or `NO ESCAPE PATH PROVEN`, and each finding is tagged `[PROVEN]`, `[LIKELY]` or `[BLOCKED]`.
-- **Admission policy.** Generates Kyverno `ValidatingPolicy` (CEL) for only what was found, or every rule with `--all`. Verified with the Kyverno CLI v1.20.0.
-- **Runtime detection.** Generates self-contained Falco rules, tailored to the mount paths that were found. Verified with `falco -V` on Falco 0.45.2.
-- **CI ready.** SARIF 2.1.0 with file and line locations, `--fail-on` severity gates and `--fail-on-escape` for proven escapes.
-- **Light footprint.** One dependency, works with any Docker context, and the probe runs on busybox, dash or bash images.
+**Find**
+
+- **Five scan targets.** Running containers, images (including their layers), Dockerfiles, compose files and the host.
+- **25 detection rules,** each with a severity, a fix and its CVE mapping. `escapearmed rules` lists them.
+- **2025 escape CVEs.** runc CVE-2025-31133, CVE-2025-52565 and CVE-2025-52881, and NVIDIA Container Toolkit CVE-2025-23266 (NVIDIAScape).
+- **Image layer checks.** Flags `/dev` symlinks, procfs symlinks and device nodes inside image layers, the setup step for the runc mount races.
+
+**Prove**
+
+- **12 canary probes.** Runtime API access, host write through bind mounts (verified on the host with a random token), host file read, `/proc/1/root`, `core_pattern`, `sysrq-trigger`, `mount(2)`, cgroup release_agent, raw disk read, kernel module capability, effective capabilities and the `LD_PRELOAD` trigger.
+- **Safe by design.** Two required flags plus a typed confirmation, no writes to kernel settings, a read-only API call, automatic cleanup, and a cleanup line in every report.
+- **Clear verdict.** Each container gets `ESCAPABLE`, `AT RISK` or `NO ESCAPE PATH PROVEN`, and each finding is tagged `[PROVEN]`, `[LIKELY]` or `[BLOCKED]`.
+
+**Fix**
+
+- **Admission policy.** A Kyverno `ValidatingPolicy` (CEL) covering only what was found, or every rule with `--all`. Verified with the Kyverno CLI v1.20.0.
+- **Runtime detection.** Self-contained Falco rules, tailored to the mount paths that were found. Verified with `falco -V` on Falco 0.45.2.
+- **CI ready.** SARIF 2.1.0 with file and line locations, `--fail-on` severity gates, and `--fail-on-escape` for proven escapes.
+- **Documented evidence.** The demo run is written up as a formal [security assessment report](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md).
+
+**Light footprint.** One dependency, works with any Docker context, and the probe runs in busybox, dash or bash images.
 
 ## System Architecture
+
+The diagram shows how a target moves through EscapeArmed, from input to enforcement.
 
 <p align="center">
   <img src="docs/assets/architecture.png" alt="EscapeArmed system architecture" width="100%">
 </p>
 
-1. **Collect.** EscapeArmed reads the target: `docker inspect` for containers, image config and saved layers for images, the file itself for Dockerfiles and compose files, and engine, runc and NVIDIA toolkit facts for the host.
-2. **Normalize.** Every source is turned into the same workload model (privilege, capabilities, mounts, namespaces, security profiles, user, environment, GPU use).
+1. **Collect.** EscapeArmed reads the target: `docker inspect` for containers, config and saved layers for images, the file itself for Dockerfiles and compose files, and engine, runc and NVIDIA toolkit facts for the host.
+2. **Normalize.** Every input becomes the same workload model: privilege, capabilities, mounts, namespaces, security profiles, user, environment and GPU use.
 3. **Analyze.** The scanner applies the 25 rules and the CVE catalog, which holds the fixed version ranges for runc and the NVIDIA toolkit.
-4. **Prove (optional).** With `--active --i-understand`, the canary prover pipes a probe script into the target with `docker exec`. Each probe reports PROVEN, LIKELY, BLOCKED or NA, and canaries are verified from the host side and then removed.
-5. **Merge.** Proof results are attached to the matching findings. Proven escape steps are raised to at least high and a verdict is computed.
-6. **Generate.** The generator writes the text and JSON report, SARIF for code scanning, a Kyverno admission policy and Falco runtime rules.
+4. **Prove (optional).** With `--active --i-understand`, the prover pipes a probe script into the container with `docker exec`. Each probe reports PROVEN, LIKELY, BLOCKED or NA. Canaries are checked from the host and then removed.
+5. **Merge.** Probe results are attached to the matching findings. Proven escape steps are raised to at least high, and a verdict is set.
+6. **Generate.** The generator writes the text and JSON report, SARIF, a Kyverno policy and Falco rules.
 7. **Enforce and report.** Upload SARIF to GitHub, apply the Kyverno policy to the cluster, load the Falco rules on the nodes, and gate CI on the exit code.
 
 ## Tech Stack
 
 - **Container engine:** Docker Engine and CLI (tested with 28.5.2), runc (tested with 1.3.6), BuildKit and buildx.
 - **Host:** Linux with cgroup v2, AppArmor and seccomp. Developed and tested on Kali Linux Rolling 2026.3, kernel 7.1.5.
-- **Probe runtime:** POSIX sh (busybox, dash or bash) inside the target container, with optional curl, perl, python3 or socat for the socket check.
-- **Policy engines:** Kyverno 1.17 or later (`policies.kyverno.io/v1` `ValidatingPolicy` with CEL), Kubernetes admission.
-- **Runtime security:** Falco 0.31 or later rules format, validated on Falco 0.45.2.
+- **Probe runtime:** POSIX sh (busybox, dash or bash) inside the container, using curl, perl, python3 or socat for the socket check if one is present.
+- **Policy engine:** Kyverno 1.17 or later (`policies.kyverno.io/v1` `ValidatingPolicy` with CEL) on Kubernetes.
+- **Runtime security:** Falco rules format 0.31 or later, validated on Falco 0.45.2.
 - **CI and reporting:** SARIF 2.1.0, GitHub code scanning, GitHub Actions.
-- **Packaging:** Python 3.9 or later, PyYAML, setuptools, pytest for tests.
-- **Diagram and logo:** SVG rendered with cairosvg. Icons from Simple Icons (CC0) and CNCF artwork.
+- **Packaging:** Python 3.9 or later, PyYAML, setuptools, and pytest for tests.
+- **Diagram and logo:** SVG rendered with cairosvg, icons from Simple Icons (CC0) and CNCF artwork.
 
 ## Setup Instructions
+
+Steps 1 to 3 install EscapeArmed. Steps 4 to 6 are optional checks.
 
 **1. Install prerequisites (Kali, Debian or Ubuntu)**
 
@@ -75,14 +90,16 @@ sudo apt install -y git python3 python3-venv docker.io
 sudo systemctl enable --now docker
 ```
 
-**2. Let your user talk to Docker (log out and back in afterwards)**
+**2. Let your user run Docker without sudo**
 
 ```bash
 sudo usermod -aG docker "$USER"
+newgrp docker
 docker info --format '{{.ServerVersion}}'
 ```
 
-- Skip this if you prefer `sudo`. Then pass `--docker "sudo docker"` to every command, or `export ESCAPEARMED_DOCKER="sudo docker"`.
+- `newgrp docker` applies the group in the current shell. Logging out and back in does the same for every shell.
+- Prefer sudo instead? Skip this step and run `export ESCAPEARMED_DOCKER="sudo docker"` before using EscapeArmed.
 
 **3. Clone and install**
 
@@ -95,23 +112,26 @@ pip install .
 escapearmed --version
 ```
 
-- A virtual environment is needed on Kali and recent Debian, which block system wide `pip install`.
+- The virtual environment is required on Kali and recent Debian, which block system-wide `pip install`.
+- In a new shell, run `. .venv/bin/activate` from the repo folder before using `escapearmed`.
 
-**4. Run the tests (optional)**
+**4. Run the unit tests (optional)**
 
 ```bash
 pip install ".[test]"
 pytest -q
 ```
 
-**5. Run the demo (optional, needs Docker)**
+**5. Run the demo (optional)**
 
 ```bash
 ./demo/run-demo.sh
 ls examples/
 ```
 
-**6. Validate generated policy against the real engines (optional)**
+- Builds a demo image, starts three containers, scans and proves them, and cleans up. Details are in [Usage step 10](#10-run-the-demo).
+
+**6. Check generated policy against the real engines (optional)**
 
 ```bash
 # Kyverno CLI
@@ -125,18 +145,36 @@ tests/falco/check-falco.sh
 
 ## Usage Guide
 
-**Global options**
+### Usage at a glance
 
-- `--docker CMD` sets the docker command, for example `--docker "sudo docker"`. The `ESCAPEARMED_DOCKER` environment variable does the same.
-- `--version` prints the version. `-h` on any command prints its flags.
+| Task | Command |
+|---|---|
+| Scan running containers | `escapearmed scan container web-1` |
+| Scan every running container | `escapearmed scan all-containers` |
+| Scan an image | `escapearmed scan image myorg/app:1.4` |
+| Scan a Dockerfile | `escapearmed scan dockerfile Dockerfile` |
+| Scan a compose file | `escapearmed scan compose docker-compose.yml` |
+| Scan the host | `escapearmed scan host` |
+| Prove escape paths (active) | `escapearmed prove my-test-container --active --i-understand` |
+| Save JSON or SARIF | `escapearmed scan compose docker-compose.yml -f sarif -o escapearmed.sarif` |
+| Generate Kyverno and Falco | `escapearmed gen-policy both --from report.json --kyverno-out policy.yaml --falco-out falco.yaml` |
+| List rules and CVEs | `escapearmed rules` |
+| Run the demo | `./demo/run-demo.sh` |
 
-**Output options (scan and prove)**
+### Common options
 
-- `-f text` (default), `-f json` or `-f sarif` picks the main format.
-- `-o FILE` writes the main output to a file instead of the terminal.
+These work on both `scan` and `prove`:
+
+- `-f text` (default), `-f json` or `-f sarif` sets the output format.
+- `-o FILE` writes the output to a file instead of the terminal.
 - `--emit-dir DIR` also writes `report.txt`, `report.json`, `escapearmed.sarif`, `kyverno-policy.yaml` and `falco-rules.yaml` into `DIR`.
 - `--fail-on SEVERITY` exits with code 2 if any finding is at or above `critical`, `high`, `medium`, `low` or `info`.
-- `--no-color` turns off terminal colors. Colors are also off when writing to a file.
+- `--no-color` turns off colors. Colors are also off when writing to a file.
+
+Global options go before the command:
+
+- `--docker CMD` sets the docker command, for example `escapearmed --docker "sudo docker" scan host`. The `ESCAPEARMED_DOCKER` variable does the same.
+- `--version` prints the version. `-h` after any command lists its flags.
 
 ### 1. Scan a running container
 
@@ -146,7 +184,8 @@ escapearmed scan container web-1 api-1 worker-1
 escapearmed scan all-containers
 ```
 
-- Reads `docker inspect` and adds host checks (runc version, NVIDIA toolkit, user namespaces, socket permissions).
+- Reads `docker inspect` for each container.
+- Also runs the host checks (runc version, NVIDIA toolkit, user namespaces, socket permissions), since they affect every container on the host.
 
 ### 2. Scan an image
 
@@ -155,10 +194,10 @@ escapearmed scan image myorg/app:1.4
 escapearmed scan image myorg/app:1.4 --no-layers
 ```
 
-- Checks image config (user, environment, GPU labels) and walks every layer for `/dev` symlinks, procfs symlinks and device nodes.
-- `--no-layers` skips the layer walk for very large images.
+- Checks the image config (user, environment, GPU labels) and walks every layer for `/dev` symlinks, procfs symlinks and device nodes.
+- `--no-layers` skips the layer walk, which helps with very large images.
 
-Example (the demo image, built from Debian slim):
+Example, the demo image built from Debian slim:
 
 ```text
 Summary
@@ -181,7 +220,7 @@ escapearmed scan dockerfile build/*.Dockerfile --with-host
 - Flags `ENV LD_PRELOAD`, steps that replace `/dev/null` or `/dev/console` or link into `/proc`, `RUN --security=insecure`, GPU base images and a missing `USER`.
 - `--with-host` adds the host checks to a file scan.
 
-Example (two test fixtures):
+Example, two test fixtures (a NVIDIAScape image and a runc race setup):
 
 ```text
 Summary
@@ -207,9 +246,9 @@ Findings
 escapearmed scan compose docker-compose.yml
 ```
 
-- Every service is checked. Findings point to the exact line.
+- Checks every service and points each finding to its exact line.
 
-Example (the demo compose file, first findings):
+Example, the first findings for the demo compose file:
 
 ```text
 Findings
@@ -234,9 +273,9 @@ Findings
 escapearmed scan host
 ```
 
-- Reports runc and NVIDIA toolkit versions against the fixed releases, daemon user namespace settings and Docker socket permissions.
+- Compares runc and NVIDIA toolkit versions with the fixed releases, and checks daemon user namespace settings and Docker socket permissions.
 
-Example (the Kali VM, runc 1.3.6 is already patched so no CVE finding):
+Example, the Kali VM (runc 1.3.6 is already patched, so there is no CVE finding):
 
 ```text
 Summary
@@ -254,22 +293,25 @@ Findings
 
 ### 6. Prove escape paths (active mode)
 
+`prove` goes beyond reading config: it runs probes inside a live container. Only use it on containers you own or are authorized to test (see the [safety note](#safety-note-on-active-mode) below).
+
 ```bash
 escapearmed prove my-test-container --active --i-understand
 ```
 
-- `--active` and `--i-understand` are both required, otherwise the command exits with code 64 and does nothing.
-- You then type the container name to confirm. In scripts, pass `--yes`. Without a terminal and without `--yes` it refuses to run.
-- `--as-root` runs the probes as UID 0 inside the container, modelling an attacker who already has root there. The default is the container's configured user.
-- `--remote-daemon` skips host side canary checks when Docker is not on this machine. Canary writes are then reported as LIKELY.
+- `--active` and `--i-understand` are both required. Without them the command exits with code 64 and does nothing.
+- You then type the container name to confirm. In scripts, pass `--yes` instead. Without a terminal and without `--yes`, it refuses to run.
+- `--as-root` runs the probes as UID 0, modelling an attacker who already has root inside. By default they run as the container's own user.
+- `--remote-daemon` skips the host side canary check when Docker runs on another machine. Canary writes are then reported as LIKELY.
 - `--fail-on-escape` exits with code 3 when the verdict is ESCAPABLE.
 
+For automation, with every artifact saved to one folder:
+
 ```bash
-# automation friendly, all artifacts in one folder
 escapearmed prove my-test-container --active --i-understand --yes --emit-dir out/ --fail-on-escape
 ```
 
-Example, `ea-sneaky` (not privileged, only SYS_ADMIN, AppArmor unconfined and host cgroup namespace):
+Example, `ea-sneaky`. It is not privileged, only adds SYS_ADMIN, disables AppArmor and shares the host cgroup namespace, yet it is proven escapable:
 
 ```text
 Summary
@@ -318,44 +360,25 @@ Active proof (canary probes)
   Cleanup: 0 canary file(s) removed, nothing left behind
 ```
 
-Example, `ea-vulnapp` (privileged, host PID, Docker socket, host root and a writable host directory):
+Example, `ea-vulnapp` (privileged, host PID, Docker socket, host root and a writable host directory), key lines only:
 
 ```text
 Summary
   CRITICAL 3  HIGH 4  MEDIUM 2  LOW 0  INFO 0
   Verdict: ESCAPABLE
 ...
-Active proof (canary probes)
-  PROVEN   Dangerous effective capabilities
-           CapEff=000001ffffffffff dangerous: SYS_ADMIN SYS_MODULE DAC_READ_SEARCH SYS_PTRACE SYS_RAWIO BPF SYS_BOOT NET_ADMIN DAC_OVERRIDE
   PROVEN   Runtime API reachable from container
            GET /version on /var/run/docker.sock answered: engine 28.5.2+dfsg4 API 1.51. Full daemon control from inside the container.
   PROVEN   Write to host filesystem through a bind mount
            canary written in container at /shared/.escapearmed-canary-b6cf9d1412c77781 appeared on the host at /tmp/escapearmed-demo-share/.escapearmed-canary-b6cf9d1412c77781 with the matching token
-  PROVEN   Read host files through a bind mount
-           read host hostname 'kali' through /host, matches this host. Host /etc/shadow is readable (content not read).
-  PROVEN   Reach host filesystem through /proc/1/root
-           read host hostname 'kali' through /proc/1/root, matches this host.
   PROVEN   Host core_pattern writable (host code exec on crash)
            /proc/sys/kernel/core_pattern is writable (current: core). Writing a |/path pipe here runs a host binary as root on the next crash. Not written.
-  PROVEN   Host sysrq-trigger writable
-           /proc/sysrq-trigger is writable, host can be crashed or rebooted from the container. Not written.
-  PROVEN   mount(2) reachable
-           mount(2) succeeded for a scratch tmpfs (unmounted)
-  BLOCKED  cgroup v1 release_agent escape reachable
-           new cgroup v1 hierarchy denied (private cgroup namespace), no writable release_agent. Becomes reachable with --cgroupns=host
   PROVEN   Raw host block device readable
            read the first sector of host block device /dev/vda (discarded)
-  LIKELY   Kernel module load capability
-           CAP_SYS_MODULE is effective, init_module would load host kernel code. Not attempted.
-  NA       LD_PRELOAD present (NVIDIAScape trigger)
-           LD_PRELOAD not set
-  INFO     identity: uid=0 uid_map=[0 0 4294967295]
-  INFO     lsm: apparmor=[unconfined] seccomp_mode=0
   Cleanup: 1 canary file(s) removed, nothing left behind
 ```
 
-Example, `ea-hardened` (non-root, no capabilities, read-only root, no-new-privileges):
+Example, `ea-hardened` (non-root, no capabilities, read-only root, no-new-privileges). Every probe came back BLOCKED or NA:
 
 ```text
 Summary
@@ -363,14 +386,38 @@ Summary
   Verdict: NO ESCAPE PATH PROVEN
 ```
 
-### 7. Generate policy
+Full outputs for all three are in [`examples/`](examples/) and in the [demo security assessment report](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md).
+
+#### Safety note on active mode
+
+- Only run `prove` against containers you own or are authorized to test.
+- Nothing is ever written to `core_pattern`, `sysrq-trigger`, `release_agent`, `binfmt_misc` or kernel modules. Those checks test write access only and say "Not written".
+- The runtime socket check sends one read-only `GET /version`. It never creates containers.
+- The only write is one canary file per writable host bind mount, holding a random token. It is checked from the host and then removed, and the report says whether anything was left.
+- Scratch mounts (a 1 MB tmpfs and an empty named cgroup v1 hierarchy) are unmounted by a trap, even on errors.
+- Raw disk access is tested by reading 512 bytes into `/dev/null`.
+
+### 7. Save JSON and SARIF
 
 ```bash
-# from findings
+escapearmed scan container web-1 -f json -o report.json
+escapearmed scan compose docker-compose.yml -f sarif -o escapearmed.sarif
+```
+
+- **JSON** holds the targets, host facts, a severity summary and every finding with evidence. After `prove`, it also holds the probe results and verdict. `gen-policy` reads this file.
+- **SARIF** has one rule entry per EscapeArmed rule, `security-severity` scores for GitHub, and file and line locations for Dockerfile and compose findings.
+
+### 8. Generate policy
+
+Start from a JSON report (step 7), then generate one or both engines:
+
+```bash
 escapearmed scan compose docker-compose.yml -f json -o report.json
+
+# both engines
 escapearmed gen-policy both --from report.json --kyverno-out policy.yaml --falco-out falco.yaml
 
-# only one engine
+# one engine
 escapearmed gen-policy kyverno --from report.json --kyverno-out policy.yaml
 escapearmed gen-policy falco --from report.json --falco-out falco.yaml
 
@@ -378,9 +425,9 @@ escapearmed gen-policy falco --from report.json --falco-out falco.yaml
 escapearmed gen-policy kyverno --all --action Audit --kyverno-out audit-policy.yaml
 ```
 
-- `--from` reads any JSON report from `scan` or `prove`. `--all` emits every rule regardless of findings.
-- `--action Enforce` (default) creates a `Deny` policy, `--action Audit` creates an `Audit` policy. Root and user namespace checks always go into a separate audit policy.
-- Output defaults to the terminal when `--kyverno-out` or `--falco-out` is not set.
+- `--from` takes any JSON report from `scan` or `prove`. `--all` emits every rule regardless of findings.
+- `--action Enforce` (default) creates a `Deny` policy. `--action Audit` creates an `Audit` policy. Root and user namespace checks always go into a separate audit policy.
+- Without `--kyverno-out` or `--falco-out`, output goes to the terminal.
 
 Apply them:
 
@@ -389,7 +436,7 @@ kubectl apply -f policy.yaml
 sudo falco -r /etc/falco/falco_rules.yaml -r falco.yaml
 ```
 
-Policy verification results from the repo test scripts:
+Verification from Setup step 6. Each test pod breaks one rule and must be blocked, and the hardened pod must be allowed:
 
 ```text
 BLOCKED  allow-priv-esc           EscapeArmed EA014
@@ -409,7 +456,52 @@ ALLOWED  good-pod
 /rules/escapearmed.yaml: Ok
 ```
 
-### 8. List rules and CVEs
+### 9. Use in CI
+
+Upload SARIF to GitHub code scanning and fail the build on critical findings:
+
+```yaml
+# .github/workflows/escapearmed.yml
+name: escapearmed
+on: [push, pull_request]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install git+https://github.com/ritvikindupuri/EscapeArmed.git
+      - run: escapearmed scan compose docker-compose.yml -f sarif -o escapearmed.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: escapearmed.sarif
+      - run: escapearmed scan compose docker-compose.yml --fail-on critical
+```
+
+**Exit codes**
+
+- `0` clean, or nothing at or above `--fail-on`.
+- `2` a finding at or above `--fail-on`.
+- `3` escape proven, with `--fail-on-escape`.
+- `64` missing safety flags or targets.
+- `65` target container not running.
+- `70` Docker error.
+
+### 10. Run the demo
+
+```bash
+./demo/run-demo.sh          # build the image, start 3 containers, scan and prove them, clean up
+KEEP=1 ./demo/run-demo.sh   # same, but leave the containers running
+```
+
+- Writes every report and artifact to `examples/`, then checks that no canary file or scratch mount was left on the host.
+- The committed run is written up in the [demo security assessment report](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md).
+
+### 11. List rules and CVEs
 
 ```bash
 escapearmed rules
@@ -448,78 +540,20 @@ CVE-2025-52881  runc LSM bypass via misdirected procfs writes  (fixed in runc 1.
 CVE-2025-23266  NVIDIAScape, NVIDIA Container Toolkit LD_PRELOAD hook escape  (fixed in NVIDIA Container Toolkit 1.17.8, GPU Operator 25.3.2)
 ```
 
-### 9. JSON and SARIF output
-
-```bash
-escapearmed scan container web-1 -f json -o report.json
-escapearmed scan compose docker-compose.yml -f sarif -o escapearmed.sarif
-```
-
-- JSON holds targets, host facts, a severity summary, every finding with evidence and, after `prove`, the probe results and verdict.
-- SARIF uses one rule entry per EscapeArmed rule, `security-severity` scores for GitHub, and the file and line for Dockerfile and compose findings.
-
-### 10. Use in CI
-
-```yaml
-# .github/workflows/escapearmed.yml
-name: escapearmed
-on: [push, pull_request]
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install git+https://github.com/ritvikindupuri/EscapeArmed.git
-      - run: escapearmed scan compose docker-compose.yml -f sarif -o escapearmed.sarif
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: escapearmed.sarif
-      - run: escapearmed scan compose docker-compose.yml --fail-on critical
-```
-
-- Exit codes: `0` clean or below threshold, `2` threshold hit, `3` escape proven, `64` missing safety flags or targets, `65` target container not running, `70` Docker error.
-
-### 11. Run the demo
-
-```bash
-./demo/run-demo.sh          # builds the image, starts 3 containers, scans and proves them, cleans up
-KEEP=1 ./demo/run-demo.sh   # same, but leaves the containers running
-```
-
-- Writes every report and artifact to `examples/`, then checks that no canary file or scratch mount was left on the host.
-- The results of the committed run are written up in the [demo security assessment report](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md).
-
-## Safety Note on Active Mode
-
-- Only run `prove` against containers you own or are authorized to test.
-- Nothing is ever written to `core_pattern`, `sysrq-trigger`, `release_agent`, `binfmt_misc` or kernel modules. Those checks test write access only and say "Not written".
-- The runtime socket check sends one read-only `GET /version`. It never creates containers.
-- The only write is one canary file per writable host bind mount, holding a random token. It is verified from the host and then removed, and the report says whether anything was left.
-- Scratch mounts (a 1 MB tmpfs and an empty named cgroup v1 hierarchy) are unmounted by a trap, even on errors.
-- Raw disk access is tested by reading 512 bytes into `/dev/null`.
-
-## Known Limits
+### Known limits
 
 - Version checks use the upstream version string. Distros that backport fixes may still show as affected, so treat EA015 as "check the package changelog".
 - The runc race CVEs need a malicious image or config to trigger. EscapeArmed detects the setup and the missing mitigations, it does not run the race.
 - containerd and CRI-O sockets speak gRPC, so the socket probe reports them as LIKELY, not PROVEN.
-- Host side canary verification assumes EscapeArmed runs on the Docker host. Use `--remote-daemon` otherwise.
+- Host side canary checks assume EscapeArmed runs on the Docker host. Use `--remote-daemon` otherwise.
 - Falco rules are validated for syntax and fields with `falco -V`, not yet replayed against live events.
 
 ## Technical Documentation
 
-Full internals, every rule with its rationale and CVE mapping, probe design and safety guarantees, output formats, limitations and testing:
-
-**[https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/TECHNICAL.md](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/TECHNICAL.md)**
-
-Formal security assessment of the demo run (executive summary, scope, findings with evidence, policy validation, cleanup verification):
-
-**[https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md)**
+- **Technical documentation:** internals, every rule with its rationale and CVE mapping, probe design and safety guarantees, output formats, limitations and testing.
+  **[https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/TECHNICAL.md](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/TECHNICAL.md)**
+- **Demo security assessment report:** executive summary, scope, findings with evidence, policy validation and cleanup verification for the demo run.
+  **[https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/DEMO-REPORT.md)**
 
 ## License
 
