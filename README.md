@@ -1,102 +1,274 @@
-# EscapeArmed
+<p align="center">
+  <img src="docs/assets/logo.png" alt="EscapeArmed logo" width="140">
+</p>
 
-Container escape readiness scanner and prover.
+<h1 align="center">EscapeArmed</h1>
 
-EscapeArmed finds the configuration that makes a container escapable, then proves it with harmless canary probes instead of guessing from version numbers. It turns what it finds into a Kyverno policy, Falco rules and SARIF for CI.
+<p align="center"><b>Prove whether a container can escape, then generate the policy that stops it.</b></p>
 
-## What it does
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="Platform: Linux" src="https://img.shields.io/badge/platform-Linux-informational">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-supported-2496ED?logo=docker&logoColor=white">
+  <img alt="Kyverno" src="https://img.shields.io/badge/Kyverno-ValidatingPolicy-3784c5">
+  <img alt="Falco" src="https://img.shields.io/badge/Falco-rules-00b4c8">
+  <img alt="SARIF" src="https://img.shields.io/badge/SARIF-2.1.0-181717?logo=github">
+</p>
 
-- **Static scan.** Reads a running container, an image, a Dockerfile, a compose file, or the host, and flags escape primitives: privileged mode, dangerous capabilities, runtime sockets, host path mounts, host PID/IPC/network namespaces, unconfined AppArmor or seccomp, host cgroup namespace, root without user namespaces, and runc race setups baked into images.
-- **Active proof.** With explicit opt in, runs read-only or self-cleaning probes inside a container you own to show which escape steps actually work on this host.
-- **Remediation output.** Generates a Kyverno `ValidatingPolicy` that blocks what was found, Falco rules that alert on the escape behavior, and SARIF 2.1.0 for code scanning.
+## Overview
 
-## Why proof matters
+EscapeArmed is a container escape readiness scanner and prover. It looks at how a workload actually runs and answers one question: can this container reach the host?
 
-- A scanner that only reads config says "SYS_ADMIN, medium risk". It cannot tell whether that is one command away from root on the host.
-- In the demo below, a container that is **not privileged, has no socket and no host mounts** is proven escapable through the cgroup release_agent path, because it combines SYS_ADMIN, unconfined AppArmor and the host cgroup namespace.
-- The same probes against a hardened container come back blocked, which is the evidence you want before closing a ticket.
+- **It finds the primitives.** Privileged mode, dangerous capabilities, mounted runtime sockets, host path mounts, shared host namespaces, disabled AppArmor or seccomp, host cgroup namespaces, root without user namespaces, and the image and Dockerfile setups behind the November 2025 runc escapes and NVIDIAScape.
+- **It proves them.** With explicit opt in, it runs harmless canary probes inside a container you own and reports which escape steps really work on this host, instead of guessing from version numbers.
+- **It closes the gap.** Findings become a Kyverno `ValidatingPolicy` that blocks the primitives at admission, Falco rules that alert on the escape behavior at runtime, and SARIF for GitHub code scanning and CI.
 
-## Attacks it targets
+Most scanners stop at "SYS_ADMIN, medium". EscapeArmed showed a container with no privileged flag, no socket and no host mounts to be escapable through the cgroup release_agent path, and showed a hardened container to be blocked on every probe. That evidence is what makes a finding actionable.
 
-| CVE | Name | What EscapeArmed checks |
-|---|---|---|
-| [CVE-2025-31133](https://github.com/opencontainers/runc/security/advisories/GHSA-9493-h29p-rfm2) | runc maskedPaths `/dev/null` symlink race (Nov 2025) | runc version on the host, `/dev` symlinks in image layers, Dockerfile steps that replace `/dev/null`, writable `core_pattern` (the end goal), user namespaces |
-| [CVE-2025-52565](https://github.com/opencontainers/runc/security/advisories/GHSA-qw9x-cqr3-wc7r) | runc `/dev/console` bind mount race (Nov 2025) | runc version, `/dev/pts` and `/dev/console` symlinks in layers and Dockerfiles, user namespaces |
-| [CVE-2025-52881](https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm) | runc LSM bypass through misdirected procfs writes (Nov 2025) | runc version, AppArmor state, writable `/proc/sysrq-trigger`, user namespaces |
-| [CVE-2025-23266](https://nvidia.custhelp.com/app/answers/detail/a_id/5659) | NVIDIAScape, NVIDIA Container Toolkit `LD_PRELOAD` hook escape | `LD_PRELOAD` in image or container env, GPU workloads, toolkit version and the `disable-cuda-compat-lib-hook` mitigation |
+## Key Features
 
-Fixed versions: runc 1.2.8, 1.3.3 and 1.4.0-rc.3. NVIDIA Container Toolkit 1.17.8 and GPU Operator 25.3.2.
+- **Five scan targets.** Running containers, images (including a layer walk), Dockerfiles, compose files and the container host.
+- **25 detection rules** with severities, remediation text and CVE mapping. Run `escapearmed rules` to list them.
+- **CVE coverage for 2025 escapes.** runc CVE-2025-31133, CVE-2025-52565 and CVE-2025-52881, and NVIDIA Container Toolkit CVE-2025-23266 (NVIDIAScape).
+- **Image layer forensics.** Flags `/dev` symlinks, procfs symlinks and device nodes shipped inside image layers, the setup step for the runc mount races.
+- **Active canary proof.** 12 probes: runtime API access, host write through bind mounts (verified from the host side with a random token), host file read, `/proc/1/root`, `core_pattern`, `sysrq-trigger`, `mount(2)`, cgroup release_agent, raw disk read, kernel module capability, effective capabilities and the `LD_PRELOAD` trigger.
+- **Safety by design.** Two required flags plus a typed confirmation, no writes to kernel knobs, read-only runtime API call, automatic cleanup of canaries and scratch mounts, and a cleanup line in every report.
+- **Clear verdict.** `ESCAPABLE`, `AT RISK` or `NO ESCAPE PATH PROVEN`, and each finding is tagged `[PROVEN]`, `[LIKELY]` or `[BLOCKED]`.
+- **Admission policy.** Generates Kyverno `ValidatingPolicy` (CEL) for only what was found, or every rule with `--all`. Verified with the Kyverno CLI v1.20.0.
+- **Runtime detection.** Generates self-contained Falco rules, tailored to the mount paths that were found. Verified with `falco -V` on Falco 0.45.2.
+- **CI ready.** SARIF 2.1.0 with file and line locations, `--fail-on` severity gates and `--fail-on-escape` for proven escapes.
+- **Light footprint.** One dependency, works with any Docker context, and the probe runs on busybox, dash or bash images.
 
-It also covers the classic primitives still used in the wild, such as exposed Docker sockets in cryptojacking campaigns, `--privileged` with `core_pattern`, release_agent, `/proc/1/root` with host PID, and raw disk access.
+## System Architecture
 
-## Install
+<p align="center">
+  <img src="docs/assets/architecture.png" alt="EscapeArmed system architecture" width="100%">
+</p>
+
+1. **Collect.** EscapeArmed reads the target: `docker inspect` for containers, image config and saved layers for images, the file itself for Dockerfiles and compose files, and engine, runc and NVIDIA toolkit facts for the host.
+2. **Normalize.** Every source is turned into the same workload model (privilege, capabilities, mounts, namespaces, security profiles, user, environment, GPU use).
+3. **Analyze.** The scanner applies the 25 rules and the CVE catalog, which holds the fixed version ranges for runc and the NVIDIA toolkit.
+4. **Prove (optional).** With `--active --i-understand`, the canary prover pipes a probe script into the target with `docker exec`. Each probe reports PROVEN, LIKELY, BLOCKED or NA, and canaries are verified from the host side and then removed.
+5. **Merge.** Proof results are attached to the matching findings. Proven escape steps are raised to at least high and a verdict is computed.
+6. **Generate.** The generator writes the text and JSON report, SARIF for code scanning, a Kyverno admission policy and Falco runtime rules.
+7. **Enforce and report.** Upload SARIF to GitHub, apply the Kyverno policy to the cluster, load the Falco rules on the nodes, and gate CI on the exit code.
+
+## Tech Stack
+
+- **Container engine:** Docker Engine and CLI (tested with 28.5.2), runc (tested with 1.3.6), BuildKit and buildx.
+- **Host:** Linux with cgroup v2, AppArmor and seccomp. Developed and tested on Kali Linux Rolling 2026.3, kernel 7.1.5.
+- **Probe runtime:** POSIX sh (busybox, dash or bash) inside the target container, with optional curl, perl, python3 or socat for the socket check.
+- **Policy engines:** Kyverno 1.17 or later (`policies.kyverno.io/v1` `ValidatingPolicy` with CEL), Kubernetes admission.
+- **Runtime security:** Falco 0.31 or later rules format, validated on Falco 0.45.2.
+- **CI and reporting:** SARIF 2.1.0, GitHub code scanning, GitHub Actions.
+- **Packaging:** Python 3.9 or later, PyYAML, setuptools, pytest for tests.
+- **Diagram and logo:** SVG rendered with cairosvg. Icons from Simple Icons (CC0) and CNCF artwork.
+
+## Setup Instructions
+
+**1. Install prerequisites (Kali, Debian or Ubuntu)**
 
 ```bash
-git clone https://github.com/ritvikindupuri/EscapeArmed
+sudo apt update
+sudo apt install -y git python3 python3-venv docker.io
+sudo systemctl enable --now docker
+```
+
+**2. Let your user talk to Docker (log out and back in afterwards)**
+
+```bash
+sudo usermod -aG docker "$USER"
+docker info --format '{{.ServerVersion}}'
+```
+
+- Skip this if you prefer `sudo`. Then pass `--docker "sudo docker"` to every command, or `export ESCAPEARMED_DOCKER="sudo docker"`.
+
+**3. Clone and install**
+
+```bash
+git clone https://github.com/ritvikindupuri/EscapeArmed.git
 cd EscapeArmed
+python3 -m venv .venv
+. .venv/bin/activate
 pip install .
 escapearmed --version
 ```
 
-- Python 3.9 or later. The only dependency is PyYAML.
-- Needs the `docker` CLI for container, image and host scans. File scans work without Docker.
-- Use `--docker "sudo docker"` or `ESCAPEARMED_DOCKER` if your user is not in the docker group.
+- A virtual environment is needed on Kali and recent Debian, which block system wide `pip install`.
 
-## Usage
-
-**scan** (static, safe to run anywhere)
+**4. Run the tests (optional)**
 
 ```bash
-escapearmed scan container web-1 api-1          # running containers, plus host checks
-escapearmed scan all-containers                 # every running container
-escapearmed scan image myorg/app:1.4            # image config and layer walk for runc race symlinks
-escapearmed scan dockerfile Dockerfile
-escapearmed scan compose docker-compose.yml
-escapearmed scan host                           # runc, NVIDIA toolkit, userns, socket permissions
+pip install ".[test]"
+pytest -q
 ```
 
-- `-f text|json|sarif` and `-o FILE` choose the output.
-- `--emit-dir DIR` writes report.txt, report.json, escapearmed.sarif, kyverno-policy.yaml and falco-rules.yaml in one go.
-- `--fail-on high` exits with code 2 when a finding at or above that severity exists, for CI gates.
+**5. Run the demo (optional, needs Docker)**
 
-**prove** (active, opt in)
+```bash
+./demo/run-demo.sh
+ls examples/
+```
+
+**6. Validate generated policy against the real engines (optional)**
+
+```bash
+# Kyverno CLI
+curl -sSL -o /tmp/kyverno.tgz https://github.com/kyverno/kyverno/releases/download/v1.20.0/kyverno-cli_v1.20.0_linux_x86_64.tar.gz
+tar -xzf /tmp/kyverno.tgz -C /tmp kyverno
+KYVERNO=/tmp/kyverno tests/k8s/check-kyverno.sh
+
+# Falco (runs in Docker)
+tests/falco/check-falco.sh
+```
+
+## Usage Guide
+
+**Global options**
+
+- `--docker CMD` sets the docker command, for example `--docker "sudo docker"`. The `ESCAPEARMED_DOCKER` environment variable does the same.
+- `--version` prints the version. `-h` on any command prints its flags.
+
+**Output options (scan and prove)**
+
+- `-f text` (default), `-f json` or `-f sarif` picks the main format.
+- `-o FILE` writes the main output to a file instead of the terminal.
+- `--emit-dir DIR` also writes `report.txt`, `report.json`, `escapearmed.sarif`, `kyverno-policy.yaml` and `falco-rules.yaml` into `DIR`.
+- `--fail-on SEVERITY` exits with code 2 if any finding is at or above `critical`, `high`, `medium`, `low` or `info`.
+- `--no-color` turns off terminal colors. Colors are also off when writing to a file.
+
+### 1. Scan a running container
+
+```bash
+escapearmed scan container web-1
+escapearmed scan container web-1 api-1 worker-1
+escapearmed scan all-containers
+```
+
+- Reads `docker inspect` and adds host checks (runc version, NVIDIA toolkit, user namespaces, socket permissions).
+
+### 2. Scan an image
+
+```bash
+escapearmed scan image myorg/app:1.4
+escapearmed scan image myorg/app:1.4 --no-layers
+```
+
+- Checks image config (user, environment, GPU labels) and walks every layer for `/dev` symlinks, procfs symlinks and device nodes.
+- `--no-layers` skips the layer walk for very large images.
+
+Example (the demo image, built from Debian slim):
+
+```text
+Summary
+  CRITICAL 0  HIGH 0  MEDIUM 1  LOW 0  INFO 0
+
+Findings
+  MEDIUM   EA013 Root in container without user namespace
+           escapearmed-demo:latest: No USER instruction, the image runs as root.
+           CVEs: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881
+           Fix: Run as a non-root USER, and enable user namespaces (rootless Docker, userns-remap, or Kubernetes hostUsers: false).
+```
+
+### 3. Scan a Dockerfile
+
+```bash
+escapearmed scan dockerfile Dockerfile
+escapearmed scan dockerfile build/*.Dockerfile --with-host
+```
+
+- Flags `ENV LD_PRELOAD`, steps that replace `/dev/null` or `/dev/console` or link into `/proc`, `RUN --security=insecure`, GPU base images and a missing `USER`.
+- `--with-host` adds the host checks to a file scan.
+
+Example (two test fixtures):
+
+```text
+Summary
+  CRITICAL 1  HIGH 2  MEDIUM 2  LOW 0  INFO 1
+
+Findings
+  CRITICAL EA017 LD_PRELOAD set in image or container environment  (tests/fixtures/Dockerfile.nvidiascape:3)
+           tests/fixtures/Dockerfile.nvidiascape: LD_PRELOAD='/proc/self/cwd/poc.so' is set on a GPU workload, the exact NVIDIAScape trigger.
+           CVEs: CVE-2025-23266
+           Fix: Remove LD_PRELOAD from the image. Block it in admission policy for GPU workloads.
+  HIGH     EA020 Build step tampers with /dev or /proc  (tests/fixtures/Dockerfile.runcrace:3)
+           tests/fixtures/Dockerfile.runcrace: RUN modifies /dev or links into /proc: rm -f /dev/null &&      ln -sf /proc/sys/kernel/core_pattern /dev/null
+           CVEs: CVE-2025-31133, CVE-2025-52565
+           Fix: Remove the instruction. Review where this Dockerfile came from.
+  HIGH     EA021 Insecure BuildKit entitlement  (tests/fixtures/Dockerfile.runcrace:5)
+           tests/fixtures/Dockerfile.runcrace: RUN --security=insecure runs this step privileged.
+           Fix: Remove --security=insecure and do not grant the security.insecure entitlement to builders.
+```
+
+### 4. Scan a compose file
+
+```bash
+escapearmed scan compose docker-compose.yml
+```
+
+- Every service is checked. Findings point to the exact line.
+
+Example (the demo compose file, first findings):
+
+```text
+Findings
+  CRITICAL EA001 Privileged container  (demo/docker-compose.yml:6)
+           demo/docker-compose.yml#vulnapp: Container runs with --privileged.
+           CVEs: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881
+           Fix: Remove privileged mode. Grant only the specific capability or device the workload needs.
+  CRITICAL EA002 Dangerous Linux capability added  (demo/docker-compose.yml:29)
+           demo/docker-compose.yml#sneaky: CAP_SYS_ADMIN added: mount, cgroup release_agent, many kernel interfaces.
+           Fix: Drop ALL capabilities and add back only what is required. Never add SYS_ADMIN or SYS_MODULE.
+  CRITICAL EA002 Dangerous Linux capability added  (demo/docker-compose.yml:8)
+           demo/docker-compose.yml#vulnapp: CAP_SYS_ADMIN added: mount, cgroup release_agent, many kernel interfaces.
+           Fix: Drop ALL capabilities and add back only what is required. Never add SYS_ADMIN or SYS_MODULE.
+  CRITICAL EA003 Container runtime socket mounted  (demo/docker-compose.yml:11)
+           demo/docker-compose.yml#vulnapp: Runtime socket /var/run/docker.sock mounted at /var/run/docker.sock (read-write). Read-only does not help, the API is still fully usable.
+           Fix: Do not mount runtime sockets. Use a scoped API proxy or a dedicated build service instead.
+```
+
+### 5. Scan the host
+
+```bash
+escapearmed scan host
+```
+
+- Reports runc and NVIDIA toolkit versions against the fixed releases, daemon user namespace settings and Docker socket permissions.
+
+Example (the Kali VM, runc 1.3.6 is already patched so no CVE finding):
+
+```text
+Summary
+  CRITICAL 0  HIGH 0  MEDIUM 2  LOW 0  INFO 0
+
+Findings
+  MEDIUM   EA023 Runtime socket writable by non-root on host
+           kali: /var/run/docker.sock is writable by group docker (op2rfrc8). Each member is effectively root.
+           Fix: Restrict socket permissions and audit the docker group, or use rootless Docker.
+  MEDIUM   EA024 Host daemon has no user namespace isolation
+           kali: Docker daemon runs rootful without userns-remap.
+           CVEs: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881
+           Fix: Enable userns-remap or run rootless Docker or Podman.
+```
+
+### 6. Prove escape paths (active mode)
 
 ```bash
 escapearmed prove my-test-container --active --i-understand
-escapearmed prove my-test-container --active --i-understand --yes --emit-dir out/   # automation
 ```
 
-- Both `--active` and `--i-understand` are required. Without a TTY you must also pass `--yes`.
-- Probes run as the container's configured user. `--as-root` models an attacker who already has root inside.
-- `--fail-on-escape` exits with code 3 when an escape path is proven.
-
-**gen-policy**
+- `--active` and `--i-understand` are both required, otherwise the command exits with code 64 and does nothing.
+- You then type the container name to confirm. In scripts, pass `--yes`. Without a terminal and without `--yes` it refuses to run.
+- `--as-root` runs the probes as UID 0 inside the container, modelling an attacker who already has root there. The default is the container's configured user.
+- `--remote-daemon` skips host side canary checks when Docker is not on this machine. Canary writes are then reported as LIKELY.
+- `--fail-on-escape` exits with code 3 when the verdict is ESCAPABLE.
 
 ```bash
-escapearmed scan compose docker-compose.yml -f json -o report.json
-escapearmed gen-policy both --from report.json --kyverno-out policy.yaml --falco-out falco.yaml
-escapearmed gen-policy kyverno --all --action Audit       # every rule, audit mode
+# automation friendly, all artifacts in one folder
+escapearmed prove my-test-container --active --i-understand --yes --emit-dir out/ --fail-on-escape
 ```
 
-**rules**
-
-```bash
-escapearmed rules        # list every detection rule and the CVEs it maps to
-```
-
-## Demo
-
-The demo runs entirely inside a Kali Linux VM (Docker 28.5.2, runc 1.3.6, kernel 7.1.5, cgroup v2). It builds a plain Debian image and starts three containers from it.
-
-- `ea-vulnapp`: privileged, host PID, SYS_ADMIN, Docker socket, host `/` read-only, and a writable host directory.
-- `ea-sneaky`: not privileged. Only SYS_ADMIN, AppArmor unconfined and `--cgroupns=host`.
-- `ea-hardened`: non-root, all capabilities dropped, read-only root, no-new-privileges.
-
-```bash
-./demo/run-demo.sh        # outputs land in examples/
-```
-
-**ea-sneaky, the interesting one**
+Example, `ea-sneaky` (not privileged, only SYS_ADMIN, AppArmor unconfined and host cgroup namespace):
 
 ```text
 Summary
@@ -145,7 +317,7 @@ Active proof (canary probes)
   Cleanup: 0 canary file(s) removed, nothing left behind
 ```
 
-**ea-vulnapp**
+Example, `ea-vulnapp` (privileged, host PID, Docker socket, host root and a writable host directory):
 
 ```text
 Summary
@@ -182,7 +354,7 @@ Active proof (canary probes)
   Cleanup: 1 canary file(s) removed, nothing left behind
 ```
 
-**ea-hardened**
+Example, `ea-hardened` (non-root, no capabilities, read-only root, no-new-privileges):
 
 ```text
 Summary
@@ -190,15 +362,33 @@ Summary
   Verdict: NO ESCAPE PATH PROVEN
 ```
 
-Every probe in the hardened container came back BLOCKED or NA. See [examples/prove-hardened.txt](examples/prove-hardened.txt).
+### 7. Generate policy
 
-Full outputs: [examples/](examples/), including SARIF, JSON, and per container Kyverno and Falco files.
+```bash
+# from findings
+escapearmed scan compose docker-compose.yml -f json -o report.json
+escapearmed gen-policy both --from report.json --kyverno-out policy.yaml --falco-out falco.yaml
 
-## Generated policy, verified
+# only one engine
+escapearmed gen-policy kyverno --from report.json --kyverno-out policy.yaml
+escapearmed gen-policy falco --from report.json --falco-out falco.yaml
 
-The generated artifacts are checked against the real engines, not just YAML parsing.
+# every rule, Kyverno in audit mode
+escapearmed gen-policy kyverno --all --action Audit --kyverno-out audit-policy.yaml
+```
 
-**Kyverno** (`tests/k8s/check-kyverno.sh`, Kyverno CLI v1.20.0). Each pod in `tests/k8s/violations/` carries one primitive and must be denied, the hardened pod must pass.
+- `--from` reads any JSON report from `scan` or `prove`. `--all` emits every rule regardless of findings.
+- `--action Enforce` (default) creates a `Deny` policy, `--action Audit` creates an `Audit` policy. Root and user namespace checks always go into a separate audit policy.
+- Output defaults to the terminal when `--kyverno-out` or `--falco-out` is not set.
+
+Apply them:
+
+```bash
+kubectl apply -f policy.yaml
+sudo falco -r /etc/falco/falco_rules.yaml -r falco.yaml
+```
+
+Policy verification results from the repo test scripts:
 
 ```text
 BLOCKED  allow-priv-esc           EscapeArmed EA014
@@ -214,78 +404,116 @@ BLOCKED  sys-admin                EscapeArmed EA002
 ALLOWED  good-pod
 ```
 
-**Falco** (`tests/falco/check-falco.sh`, `falco -V` with falcosecurity/falco:0.45.2)
-
 ```text
 /rules/escapearmed.yaml: Ok
 ```
 
-- Kyverno output uses `policies.kyverno.io/v1` `ValidatingPolicy` with CEL. Kyverno 1.20 removed the legacy `ClusterPolicy` engine, so this is the format current clusters accept.
-- Falco rules define their own `ea_*` macros, so they load with or without the default ruleset.
-
-## Safety note on active mode
-
-- Only run `prove` against containers you own or are authorized to test.
-- Nothing is ever written to `core_pattern`, `sysrq-trigger`, `release_agent`, `binfmt_misc` or kernel modules. Those checks use `access()` style tests and report "Not written".
-- The runtime socket check sends one read-only `GET /version`. It never creates containers.
-- The only write is one canary file per writable host bind mount, containing a random token. The host side copy is verified, then removed, and the report says whether anything was left behind.
-- Scratch mounts (a 1 MB tmpfs and an empty named cgroup v1 hierarchy) are unmounted by a trap, even on errors.
-- Raw disk access is tested by reading the first 512 bytes into `/dev/null`.
-
-## Rules
-
-| ID | Severity | Rule |
-|---|---|---|
-| EA001 | critical | Privileged container |
-| EA002 | high to critical | Dangerous capability added (SYS_ADMIN, SYS_MODULE, DAC_READ_SEARCH, SYS_PTRACE, BPF, ...) |
-| EA003 | critical | Container runtime socket mounted |
-| EA004 | critical | Host root filesystem mounted |
-| EA005 | high | Sensitive host path mounted (/proc, /sys, /etc, /var/lib/docker, ...) |
-| EA006 to EA008 | high, medium | Host PID, network, IPC namespaces |
-| EA009, EA010 | high | AppArmor or seccomp unconfined |
-| EA011 | high | Host device exposed |
-| EA012 | medium | Host cgroup namespace or writable cgroupfs |
-| EA013 | medium | Root in container without user namespace |
-| EA014 | low | no-new-privileges not set |
-| EA015 | critical | runc vulnerable to the November 2025 escapes |
-| EA016 | critical | NVIDIA Container Toolkit vulnerable to NVIDIAScape |
-| EA017 | high to critical | LD_PRELOAD in image or container env |
-| EA018 | info | GPU workload on NVIDIA runtime |
-| EA019 | critical | Image layers ship `/dev` or procfs symlinks |
-| EA020 | high | Dockerfile step tampers with `/dev` or `/proc` |
-| EA021 | high | `RUN --security=insecure` BuildKit entitlement |
-| EA022 | medium | userns_mode: host |
-| EA023 | medium to critical | Docker socket writable by non-root on the host |
-| EA024 | medium | Daemon has no user namespace isolation |
-| EA025 | medium | Writable host bind mount |
-
-A finding whose escape step is proven is marked `[PROVEN]` and raised to at least high.
-
-## How it works
-
-- `escapearmed/sources/` normalizes docker inspect, image config and layers, Dockerfiles and compose files into one `ContainerSpec`.
-- `escapearmed/analyzer.py` applies the rules to a spec and to host facts (runc and toolkit version ranges, daemon security options, socket permissions).
-- `escapearmed/probe.sh` is a POSIX sh probe (busybox, dash, bash) piped into the container with `docker exec -i ... sh -s`. It prints one `EA|probe|STATUS|evidence` line per check.
-- `escapearmed/prover.py` verifies canaries from the host side, matches hostnames read through mounts against the real host, cleans up, and computes the verdict.
-- `escapearmed/generators/` builds Kyverno, Falco and SARIF output from the findings.
-
-## Limitations
-
-- Version checks use the upstream version string. Distros that backport fixes may still show as affected, so treat EA015 as "verify the package changelog".
-- The runc race CVEs need a malicious image or config to trigger. EscapeArmed detects the setup and the missing mitigations, it does not run the race.
-- containerd and CRI-O sockets speak gRPC, so the socket probe reports them as LIKELY rather than PROVEN.
-- Host side canary verification assumes the scanner runs on the Docker host. Use `--remote-daemon` otherwise.
-- Falco rules were validated for syntax and field names with `falco -V`, not yet replayed against live events.
-
-## Tests
+### 8. List rules and CVEs
 
 ```bash
-pip install .[test]
-pytest -q
+escapearmed rules
 ```
 
-- 24 unit tests cover parsers, rule logic, version ranges, SARIF shape, policy generation and probe interpretation.
-- `tests/k8s/check-kyverno.sh` and `tests/falco/check-falco.sh` validate generated policy against the real engines.
+```text
+EA001  CRITICAL Privileged container  [CVE-2025-31133, CVE-2025-52565, CVE-2025-52881]
+EA002  HIGH     Dangerous Linux capability added
+EA003  CRITICAL Container runtime socket mounted
+EA004  CRITICAL Host root filesystem mounted
+EA005  HIGH     Sensitive host path mounted
+EA006  HIGH     Host PID namespace shared
+EA007  MEDIUM   Host network namespace shared
+EA008  MEDIUM   Host IPC namespace shared
+EA009  HIGH     AppArmor disabled (unconfined)  [CVE-2025-52881]
+EA010  HIGH     Seccomp disabled (unconfined)
+EA011  HIGH     Host device exposed
+EA012  MEDIUM   Host cgroup namespace or writable cgroupfs
+EA013  MEDIUM   Root in container without user namespace  [CVE-2025-31133, CVE-2025-52565, CVE-2025-52881]
+EA014  LOW      no-new-privileges not set
+EA015  CRITICAL runc vulnerable to November 2025 escapes  [CVE-2025-31133, CVE-2025-52565, CVE-2025-52881]
+EA016  CRITICAL NVIDIA Container Toolkit vulnerable to NVIDIAScape  [CVE-2025-23266]
+EA017  HIGH     LD_PRELOAD set in image or container environment  [CVE-2025-23266]
+EA018  INFO     GPU workload on NVIDIA runtime  [CVE-2025-23266]
+EA019  CRITICAL Image ships device or procfs symlinks  [CVE-2025-31133, CVE-2025-52565]
+EA020  HIGH     Build step tampers with /dev or /proc  [CVE-2025-31133, CVE-2025-52565]
+EA021  HIGH     Insecure BuildKit entitlement
+EA022  MEDIUM   User namespace explicitly disabled  [CVE-2025-31133, CVE-2025-52565, CVE-2025-52881]
+EA023  HIGH     Runtime socket writable by non-root on host
+EA024  MEDIUM   Host daemon has no user namespace isolation  [CVE-2025-31133, CVE-2025-52565, CVE-2025-52881]
+EA025  MEDIUM   Writable host bind mount
+
+CVE-2025-31133  runc maskedPaths /dev/null symlink race  (fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3)
+CVE-2025-52565  runc /dev/console bind mount race  (fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3)
+CVE-2025-52881  runc LSM bypass via misdirected procfs writes  (fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3)
+CVE-2025-23266  NVIDIAScape, NVIDIA Container Toolkit LD_PRELOAD hook escape  (fixed in NVIDIA Container Toolkit 1.17.8, GPU Operator 25.3.2)
+```
+
+### 9. JSON and SARIF output
+
+```bash
+escapearmed scan container web-1 -f json -o report.json
+escapearmed scan compose docker-compose.yml -f sarif -o escapearmed.sarif
+```
+
+- JSON holds targets, host facts, a severity summary, every finding with evidence and, after `prove`, the probe results and verdict.
+- SARIF uses one rule entry per EscapeArmed rule, `security-severity` scores for GitHub, and the file and line for Dockerfile and compose findings.
+
+### 10. Use in CI
+
+```yaml
+# .github/workflows/escapearmed.yml
+name: escapearmed
+on: [push, pull_request]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install git+https://github.com/ritvikindupuri/EscapeArmed.git
+      - run: escapearmed scan compose docker-compose.yml -f sarif -o escapearmed.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: escapearmed.sarif
+      - run: escapearmed scan compose docker-compose.yml --fail-on critical
+```
+
+- Exit codes: `0` clean or below threshold, `2` threshold hit, `3` escape proven, `64` missing safety flags or targets, `65` target container not running, `70` Docker error.
+
+### 11. Run the demo
+
+```bash
+./demo/run-demo.sh          # builds the image, starts 3 containers, scans and proves them, cleans up
+KEEP=1 ./demo/run-demo.sh   # same, but leaves the containers running
+```
+
+- Writes every report and artifact to `examples/`, then checks that no canary file or scratch mount was left on the host.
+
+## Safety Note on Active Mode
+
+- Only run `prove` against containers you own or are authorized to test.
+- Nothing is ever written to `core_pattern`, `sysrq-trigger`, `release_agent`, `binfmt_misc` or kernel modules. Those checks test write access only and say "Not written".
+- The runtime socket check sends one read-only `GET /version`. It never creates containers.
+- The only write is one canary file per writable host bind mount, holding a random token. It is verified from the host and then removed, and the report says whether anything was left.
+- Scratch mounts (a 1 MB tmpfs and an empty named cgroup v1 hierarchy) are unmounted by a trap, even on errors.
+- Raw disk access is tested by reading 512 bytes into `/dev/null`.
+
+## Known Limits
+
+- Version checks use the upstream version string. Distros that backport fixes may still show as affected, so treat EA015 as "check the package changelog".
+- The runc race CVEs need a malicious image or config to trigger. EscapeArmed detects the setup and the missing mitigations, it does not run the race.
+- containerd and CRI-O sockets speak gRPC, so the socket probe reports them as LIKELY, not PROVEN.
+- Host side canary verification assumes EscapeArmed runs on the Docker host. Use `--remote-daemon` otherwise.
+- Falco rules are validated for syntax and fields with `falco -V`, not yet replayed against live events.
+
+## Technical Documentation
+
+Full internals, every rule with its rationale and CVE mapping, probe design and safety guarantees, output formats, limitations and testing:
+
+**[https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/TECHNICAL.md](https://github.com/ritvikindupuri/EscapeArmed/blob/main/docs/TECHNICAL.md)**
 
 ## License
 
