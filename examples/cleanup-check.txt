@@ -1,0 +1,2 @@
+no canary files left in /tmp/escapearmed-demo-share
+no escapearmed mounts left on the host

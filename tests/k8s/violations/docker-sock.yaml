@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: docker-sock
+spec:
+  hostUsers: false
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: debian:bookworm-slim
+    securityContext:
+      allowPrivilegeEscalation: false
+      runAsUser: 10001
+      capabilities:
+        drop:
+        - ALL
+  volumes:
+  - name: s
+    hostPath:
+      path: /var/run/docker.sock

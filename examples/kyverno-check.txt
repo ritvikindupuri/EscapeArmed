@@ -1,0 +1,11 @@
+BLOCKED  allow-priv-esc           EscapeArmed EA014
+BLOCKED  apparmor-unconfined      EscapeArmed EA009
+BLOCKED  docker-sock              EscapeArmed EA003
+BLOCKED  host-etc                 EscapeArmed EA004/EA005
+BLOCKED  host-pid                 EscapeArmed EA006/EA007/EA008
+BLOCKED  host-root                EscapeArmed EA004/EA005
+BLOCKED  ld-preload               EscapeArmed EA017
+BLOCKED  privileged               EscapeArmed EA001
+BLOCKED  seccomp-unconfined       EscapeArmed EA010
+BLOCKED  sys-admin                EscapeArmed EA002
+ALLOWED  good-pod

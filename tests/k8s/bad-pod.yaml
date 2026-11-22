@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-pod
+spec:
+  hostPID: true
+  containers:
+    - name: app
+      image: debian:bookworm-slim
+      env:
+        - name: LD_PRELOAD
+          value: /tmp/x.so
+      securityContext:
+        privileged: true
+        capabilities:
+          add: ["SYS_ADMIN"]
+        seccompProfile:
+          type: Unconfined
+      volumeMounts:
+        - name: sock
+          mountPath: /var/run/docker.sock
+        - name: root
+          mountPath: /host
+  volumes:
+    - name: sock
+      hostPath:
+        path: /var/run/docker.sock
+    - name: root
+      hostPath:
+        path: /

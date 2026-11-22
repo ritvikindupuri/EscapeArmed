@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allow-priv-esc
+spec:
+  hostUsers: false
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: debian:bookworm-slim
+    securityContext:
+      allowPrivilegeEscalation: true
+      runAsUser: 10001
+      capabilities:
+        drop:
+        - ALL

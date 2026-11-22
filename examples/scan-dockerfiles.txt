@@ -1,0 +1,39 @@
+EscapeArmed 0.1.0  container escape readiness report
+
+Targets
+  - dockerfile tests/fixtures/Dockerfile.nvidiascape
+  - dockerfile tests/fixtures/Dockerfile.runcrace
+
+Summary
+  CRITICAL 1  HIGH 2  MEDIUM 2  LOW 0  INFO 1
+
+Findings
+  CRITICAL EA017 LD_PRELOAD set in image or container environment  (tests/fixtures/Dockerfile.nvidiascape:3)
+           tests/fixtures/Dockerfile.nvidiascape: LD_PRELOAD='/proc/self/cwd/poc.so' is set on a GPU workload, the exact NVIDIAScape trigger.
+           CVEs: CVE-2025-23266
+           Fix: Remove LD_PRELOAD from the image. Block it in admission policy for GPU workloads.
+  HIGH     EA020 Build step tampers with /dev or /proc  (tests/fixtures/Dockerfile.runcrace:3)
+           tests/fixtures/Dockerfile.runcrace: RUN modifies /dev or links into /proc: rm -f /dev/null &&      ln -sf /proc/sys/kernel/core_pattern /dev/null
+           CVEs: CVE-2025-31133, CVE-2025-52565
+           Fix: Remove the instruction. Review where this Dockerfile came from.
+  HIGH     EA021 Insecure BuildKit entitlement  (tests/fixtures/Dockerfile.runcrace:5)
+           tests/fixtures/Dockerfile.runcrace: RUN --security=insecure runs this step privileged.
+           Fix: Remove --security=insecure and do not grant the security.insecure entitlement to builders.
+  MEDIUM   EA013 Root in container without user namespace  (tests/fixtures/Dockerfile.nvidiascape:1)
+           tests/fixtures/Dockerfile.nvidiascape: No USER instruction, the image runs as root.
+           CVEs: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881
+           Fix: Run as a non-root USER, and enable user namespaces (rootless Docker, userns-remap, or Kubernetes hostUsers: false).
+  MEDIUM   EA013 Root in container without user namespace  (tests/fixtures/Dockerfile.runcrace:1)
+           tests/fixtures/Dockerfile.runcrace: No USER instruction, the image runs as root.
+           CVEs: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881
+           Fix: Run as a non-root USER, and enable user namespaces (rootless Docker, userns-remap, or Kubernetes hostUsers: false).
+  INFO     EA018 GPU workload on NVIDIA runtime  (tests/fixtures/Dockerfile.nvidiascape:1)
+           tests/fixtures/Dockerfile.nvidiascape: Workload requests NVIDIA GPUs.
+           CVEs: CVE-2025-23266
+           Fix: Keep the toolkit patched (>= 1.17.8) and only allow trusted images on GPU nodes.
+
+CVE context
+  - CVE-2025-23266 NVIDIAScape, NVIDIA Container Toolkit LD_PRELOAD hook escape. Fixed in NVIDIA Container Toolkit 1.17.8, GPU Operator 25.3.2.
+  - CVE-2025-31133 runc maskedPaths /dev/null symlink race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3.
+  - CVE-2025-52565 runc /dev/console bind mount race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3.
+  - CVE-2025-52881 runc LSM bypass via misdirected procfs writes. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3.

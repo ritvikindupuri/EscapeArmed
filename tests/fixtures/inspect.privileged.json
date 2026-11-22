@@ -1,0 +1,25 @@
+{
+  "Id": "4f2a9c1d0e7b",
+  "Name": "/vulnapp",
+  "AppArmorProfile": "unconfined",
+  "State": {"Status": "running"},
+  "Config": {"Image": "escapearmed-demo:vuln", "User": "", "Env": ["PATH=/usr/bin"]},
+  "HostConfig": {
+    "Privileged": true,
+    "CapAdd": ["CAP_SYS_ADMIN"],
+    "PidMode": "host",
+    "NetworkMode": "bridge",
+    "IpcMode": "private",
+    "CgroupnsMode": "private",
+    "SecurityOpt": ["label=disable"],
+    "Devices": [],
+    "Runtime": "runc",
+    "DeviceRequests": null,
+    "ReadonlyRootfs": false
+  },
+  "Mounts": [
+    {"Type": "bind", "Source": "/var/run/docker.sock", "Destination": "/var/run/docker.sock", "RW": true},
+    {"Type": "bind", "Source": "/", "Destination": "/host", "RW": false},
+    {"Type": "volume", "Source": "/var/lib/docker/volumes/x/_data", "Destination": "/cache", "RW": true}
+  ]
+}

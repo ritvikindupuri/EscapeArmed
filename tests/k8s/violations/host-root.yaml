@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: host-root
+spec:
+  hostUsers: false
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: debian:bookworm-slim
+    securityContext:
+      allowPrivilegeEscalation: false
+      runAsUser: 10001
+      capabilities:
+        drop:
+        - ALL
+  volumes:
+  - name: r
+    hostPath:
+      path: /

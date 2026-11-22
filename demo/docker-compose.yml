@@ -1,0 +1,33 @@
+# Deliberately vulnerable demo. Do not deploy this anywhere real.
+services:
+  vulnapp:
+    image: escapearmed-demo:latest
+    container_name: ea-vulnapp
+    privileged: true
+    pid: host
+    cap_add:
+      - SYS_ADMIN
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:ro
+      - /tmp/escapearmed-demo-share:/shared
+  hardened:
+    image: escapearmed-demo:latest
+    container_name: ea-hardened
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+  sneaky:
+    # Not privileged, no socket, no host mounts. Still escapable.
+    image: escapearmed-demo:latest
+    container_name: ea-sneaky
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    cgroup: host

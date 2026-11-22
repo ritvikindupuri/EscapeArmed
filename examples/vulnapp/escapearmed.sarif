@@ -1,0 +1,469 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "EscapeArmed",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/ritvikindupuri/EscapeArmed",
+          "rules": [
+            {
+              "id": "EA001",
+              "name": "Privilegedcontainer",
+              "shortDescription": {
+                "text": "Privileged container"
+              },
+              "fullDescription": {
+                "text": "--privileged disables almost every isolation boundary: all capabilities, all host devices, writable /proc/sys and /sys, no seccomp and no AppArmor. Host escape is a few shell commands away (core_pattern, cgroup release_agent, raw disk mount)."
+              },
+              "help": {
+                "text": "--privileged disables almost every isolation boundary: all capabilities, all host devices, writable /proc/sys and /sys, no seccomp and no AppArmor. Host escape is a few shell commands away (core_pattern, cgroup release_agent, raw disk mount).\n\nFix: Remove privileged mode. Grant only the specific capability or device the workload needs.\nCVE-2025-31133: runc maskedPaths /dev/null symlink race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-9493-h29p-rfm2\nCVE-2025-52565: runc /dev/console bind mount race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-qw9x-cqr3-wc7r\nCVE-2025-52881: runc LSM bypass via misdirected procfs writes. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "9.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape",
+                  "CVE-2025-31133",
+                  "CVE-2025-52565",
+                  "CVE-2025-52881"
+                ]
+              }
+            },
+            {
+              "id": "EA002",
+              "name": "DangerousLinuxcapabilityadded",
+              "shortDescription": {
+                "text": "Dangerous Linux capability added"
+              },
+              "fullDescription": {
+                "text": "Capabilities such as SYS_ADMIN, SYS_MODULE, DAC_READ_SEARCH, SYS_PTRACE, SYS_RAWIO and BPF each enable a known escape path (mounting, kernel module load, open_by_handle_at, process injection, raw IO, eBPF)."
+              },
+              "help": {
+                "text": "Capabilities such as SYS_ADMIN, SYS_MODULE, DAC_READ_SEARCH, SYS_PTRACE, SYS_RAWIO and BPF each enable a known escape path (mounting, kernel module load, open_by_handle_at, process injection, raw IO, eBPF).\n\nFix: Drop ALL capabilities and add back only what is required. Never add SYS_ADMIN or SYS_MODULE."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA003",
+              "name": "Containerruntimesocketmounted",
+              "shortDescription": {
+                "text": "Container runtime socket mounted"
+              },
+              "fullDescription": {
+                "text": "A mounted docker.sock, containerd.sock or crio.sock gives full control of the runtime. Anyone in the container can start a new privileged container with the host root mounted. This is the primitive abused by Docker API cryptojacking campaigns."
+              },
+              "help": {
+                "text": "A mounted docker.sock, containerd.sock or crio.sock gives full control of the runtime. Anyone in the container can start a new privileged container with the host root mounted. This is the primitive abused by Docker API cryptojacking campaigns.\n\nFix: Do not mount runtime sockets. Use a scoped API proxy or a dedicated build service instead."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "9.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA004",
+              "name": "Hostrootfilesystemmounted",
+              "shortDescription": {
+                "text": "Host root filesystem mounted"
+              },
+              "fullDescription": {
+                "text": "The host / is bind mounted into the container. Writing to it is equivalent to root on the host."
+              },
+              "help": {
+                "text": "The host / is bind mounted into the container. Writing to it is equivalent to root on the host.\n\nFix: Mount only the exact host directory the workload needs, read-only where possible."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "9.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA006",
+              "name": "HostPIDnamespaceshared",
+              "shortDescription": {
+                "text": "Host PID namespace shared"
+              },
+              "fullDescription": {
+                "text": "With the host PID namespace the container sees every host process and can reach host filesystems through /proc/<pid>/root, or inject into processes with ptrace."
+              },
+              "help": {
+                "text": "With the host PID namespace the container sees every host process and can reach host filesystems through /proc/<pid>/root, or inject into processes with ptrace.\n\nFix: Remove pid: host / hostPID: true."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA013",
+              "name": "Rootincontainerwithoutusernamespace",
+              "shortDescription": {
+                "text": "Root in container without user namespace"
+              },
+              "fullDescription": {
+                "text": "UID 0 in the container is UID 0 on the host. User namespaces (rootless or userns-remap) are the main mitigation for the November 2025 runc escapes because the remapped root cannot write host procfs files."
+              },
+              "help": {
+                "text": "UID 0 in the container is UID 0 on the host. User namespaces (rootless or userns-remap) are the main mitigation for the November 2025 runc escapes because the remapped root cannot write host procfs files.\n\nFix: Run as a non-root USER, and enable user namespaces (rootless Docker, userns-remap, or Kubernetes hostUsers: false).\nCVE-2025-31133: runc maskedPaths /dev/null symlink race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-9493-h29p-rfm2\nCVE-2025-52565: runc /dev/console bind mount race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-qw9x-cqr3-wc7r\nCVE-2025-52881: runc LSM bypass via misdirected procfs writes. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "5.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape",
+                  "CVE-2025-31133",
+                  "CVE-2025-52565",
+                  "CVE-2025-52881"
+                ]
+              }
+            },
+            {
+              "id": "EA023",
+              "name": "Runtimesocketwritablebynon-rootonhost",
+              "shortDescription": {
+                "text": "Runtime socket writable by non-root on host"
+              },
+              "fullDescription": {
+                "text": "The Docker socket on the host is group or world writable. Any member of that group is effectively root."
+              },
+              "help": {
+                "text": "The Docker socket on the host is group or world writable. Any member of that group is effectively root.\n\nFix: Restrict socket permissions and audit the docker group, or use rootless Docker."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA024",
+              "name": "Hostdaemonhasnousernamespaceisolation",
+              "shortDescription": {
+                "text": "Host daemon has no user namespace isolation"
+              },
+              "fullDescription": {
+                "text": "The container engine runs rootful without userns-remap, so container root maps to host root for every workload."
+              },
+              "help": {
+                "text": "The container engine runs rootful without userns-remap, so container root maps to host root for every workload.\n\nFix: Enable userns-remap or run rootless Docker or Podman.\nCVE-2025-31133: runc maskedPaths /dev/null symlink race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-9493-h29p-rfm2\nCVE-2025-52565: runc /dev/console bind mount race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-qw9x-cqr3-wc7r\nCVE-2025-52881: runc LSM bypass via misdirected procfs writes. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "5.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape",
+                  "CVE-2025-31133",
+                  "CVE-2025-52565",
+                  "CVE-2025-52881"
+                ]
+              }
+            },
+            {
+              "id": "EA025",
+              "name": "Writablehostbindmount",
+              "shortDescription": {
+                "text": "Writable host bind mount"
+              },
+              "fullDescription": {
+                "text": "A host directory is bind mounted read-write. Anything written in the container lands on the host, which is a persistence and tampering path even when the directory looks harmless."
+              },
+              "help": {
+                "text": "A host directory is bind mounted read-write. Anything written in the container lands on the host, which is a persistence and tampering path even when the directory looks harmless.\n\nFix: Mount host paths read-only, or use a named volume."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "5.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EA001",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "Privileged container: Container runs with --privileged. Related: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-vulnapp"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "target": "ea-vulnapp",
+            "proof": "PROVEN"
+          }
+        },
+        {
+          "ruleId": "EA002",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "Dangerous Linux capability added: CAP_SYS_ADMIN added: mount, cgroup release_agent, many kernel interfaces."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-vulnapp"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "target": "ea-vulnapp",
+            "proof": "PROVEN"
+          }
+        },
+        {
+          "ruleId": "EA003",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "Container runtime socket mounted: Runtime socket /var/run/docker.sock mounted at /var/run/docker.sock (read-write). Read-only does not help, the API is still fully usable."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-vulnapp"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "target": "ea-vulnapp",
+            "proof": "PROVEN"
+          }
+        },
+        {
+          "ruleId": "EA004",
+          "ruleIndex": 3,
+          "level": "error",
+          "message": {
+            "text": "Host root filesystem mounted: Host / mounted at /host (read-only)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-vulnapp"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "target": "ea-vulnapp",
+            "proof": "PROVEN"
+          }
+        },
+        {
+          "ruleId": "EA025",
+          "ruleIndex": 8,
+          "level": "error",
+          "message": {
+            "text": "Writable host bind mount: Host /tmp/escapearmed-demo-share mounted read-write at /shared."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-vulnapp"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "target": "ea-vulnapp",
+            "proof": "PROVEN"
+          }
+        },
+        {
+          "ruleId": "EA006",
+          "ruleIndex": 4,
+          "level": "error",
+          "message": {
+            "text": "Host PID namespace shared: pid: host shares the host PID namespace."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-vulnapp"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "target": "ea-vulnapp",
+            "proof": "PROVEN"
+          }
+        },
+        {
+          "ruleId": "EA013",
+          "ruleIndex": 5,
+          "level": "error",
+          "message": {
+            "text": "Root in container without user namespace: Process runs as UID 0. Related: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-vulnapp"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "target": "ea-vulnapp",
+            "proof": "NOT_TESTED"
+          }
+        },
+        {
+          "ruleId": "EA024",
+          "ruleIndex": 7,
+          "level": "warning",
+          "message": {
+            "text": "Host daemon has no user namespace isolation: Docker daemon runs rootful without userns-remap. Related: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/kali"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "target": "kali",
+            "proof": "NOT_TESTED"
+          }
+        },
+        {
+          "ruleId": "EA023",
+          "ruleIndex": 6,
+          "level": "warning",
+          "message": {
+            "text": "Runtime socket writable by non-root on host: /var/run/docker.sock is writable by group docker (op2rfrc8). Each member is effectively root."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/kali"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "target": "kali",
+            "proof": "NOT_TESTED"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,294 @@
+{
+  "tool": "EscapeArmed",
+  "version": "0.1.0",
+  "targets": [
+    "container ea-sneaky (image escapearmed-demo:latest)"
+  ],
+  "host": {
+    "hostname": "kali",
+    "engine_version": "28.5.2+dfsg4",
+    "security_options": [
+      "name=apparmor",
+      "name=seccomp,profile=builtin",
+      "name=cgroupns"
+    ],
+    "cgroup_version": "2",
+    "default_runtime": "runc",
+    "runtimes": [
+      "io.containerd.runc.v2",
+      "runc"
+    ],
+    "runc_commit": "1.3.6+ds1-1",
+    "kernel": "7.1.5+kali-amd64",
+    "runc_version": "1.3.6+ds1",
+    "nvidia_toolkit_version": "",
+    "nvidia_cuda_compat_hook_disabled": false,
+    "socket": {
+      "path": "/var/run/docker.sock",
+      "mode": 432,
+      "mode_octal": "0o660",
+      "group": "docker",
+      "group_members": [
+        "op2rfrc8"
+      ]
+    }
+  },
+  "summary": {
+    "critical": 1,
+    "high": 2,
+    "medium": 3,
+    "low": 1,
+    "info": 0
+  },
+  "findings": [
+    {
+      "rule_id": "EA002",
+      "title": "Dangerous Linux capability added",
+      "severity": "critical",
+      "target": "ea-sneaky",
+      "detail": "CAP_SYS_ADMIN added: mount, cgroup release_agent, many kernel interfaces.",
+      "cves": [],
+      "remediation": "Drop ALL capabilities and add back only what is required. Never add SYS_ADMIN or SYS_MODULE.",
+      "evidence": {
+        "capability": "SYS_ADMIN"
+      },
+      "file": null,
+      "line": null,
+      "proof": "PROVEN"
+    },
+    {
+      "rule_id": "EA009",
+      "title": "AppArmor disabled (unconfined)",
+      "severity": "high",
+      "target": "ea-sneaky",
+      "detail": "AppArmor profile is unconfined.",
+      "cves": [
+        "CVE-2025-52881"
+      ],
+      "remediation": "Use the default docker-default or runtime/default AppArmor profile.",
+      "evidence": {},
+      "file": null,
+      "line": null,
+      "proof": "NOT_TESTED"
+    },
+    {
+      "rule_id": "EA012",
+      "title": "Host cgroup namespace or writable cgroupfs",
+      "severity": "high",
+      "target": "ea-sneaky",
+      "detail": "Host cgroup namespace plus SYS_ADMIN makes release_agent reachable.",
+      "cves": [],
+      "remediation": "Use a private cgroup namespace (the default on cgroup v2) and never mount cgroupfs read-write.",
+      "evidence": {},
+      "file": null,
+      "line": null,
+      "proof": "PROVEN"
+    },
+    {
+      "rule_id": "EA013",
+      "title": "Root in container without user namespace",
+      "severity": "medium",
+      "target": "ea-sneaky",
+      "detail": "Process runs as UID 0.",
+      "cves": [
+        "CVE-2025-31133",
+        "CVE-2025-52565",
+        "CVE-2025-52881"
+      ],
+      "remediation": "Run as a non-root USER, and enable user namespaces (rootless Docker, userns-remap, or Kubernetes hostUsers: false).",
+      "evidence": {},
+      "file": null,
+      "line": null,
+      "proof": "NOT_TESTED"
+    },
+    {
+      "rule_id": "EA023",
+      "title": "Runtime socket writable by non-root on host",
+      "severity": "medium",
+      "target": "kali",
+      "detail": "/var/run/docker.sock is writable by group docker (op2rfrc8). Each member is effectively root.",
+      "cves": [],
+      "remediation": "Restrict socket permissions and audit the docker group, or use rootless Docker.",
+      "evidence": {
+        "path": "/var/run/docker.sock",
+        "mode": 432,
+        "mode_octal": "0o660",
+        "group": "docker",
+        "group_members": [
+          "op2rfrc8"
+        ]
+      },
+      "file": null,
+      "line": null,
+      "proof": "NOT_TESTED"
+    },
+    {
+      "rule_id": "EA024",
+      "title": "Host daemon has no user namespace isolation",
+      "severity": "medium",
+      "target": "kali",
+      "detail": "Docker daemon runs rootful without userns-remap.",
+      "cves": [
+        "CVE-2025-31133",
+        "CVE-2025-52565",
+        "CVE-2025-52881"
+      ],
+      "remediation": "Enable userns-remap or run rootless Docker or Podman.",
+      "evidence": {
+        "security_options": [
+          "name=apparmor",
+          "name=seccomp,profile=builtin",
+          "name=cgroupns"
+        ]
+      },
+      "file": null,
+      "line": null,
+      "proof": "NOT_TESTED"
+    },
+    {
+      "rule_id": "EA014",
+      "title": "no-new-privileges not set",
+      "severity": "low",
+      "target": "ea-sneaky",
+      "detail": "no-new-privileges is not set.",
+      "cves": [],
+      "remediation": "Set security_opt: no-new-privileges:true or allowPrivilegeEscalation: false.",
+      "evidence": {},
+      "file": null,
+      "line": null,
+      "proof": "NOT_TESTED"
+    }
+  ],
+  "proof": {
+    "container": "ea-sneaky",
+    "token": "1a94523425f8e0c9",
+    "plan": {
+      "write": [],
+      "read": [],
+      "sockets": [],
+      "cgroupns": "host"
+    },
+    "info": {
+      "identity": "uid=0 uid_map=[0 0 4294967295]",
+      "lsm": "apparmor=[unconfined] seccomp_mode=2",
+      "done": "probe finished"
+    },
+    "results": [
+      {
+        "probe_id": "caps",
+        "title": "Dangerous effective capabilities",
+        "status": "PROVEN",
+        "evidence": "CapEff=00000000a82425fb dangerous: SYS_ADMIN DAC_OVERRIDE",
+        "rule_ids": [
+          "EA001",
+          "EA002"
+        ],
+        "cves": []
+      },
+      {
+        "probe_id": "runtime_socket",
+        "title": "Runtime API reachable from container",
+        "status": "NA",
+        "evidence": "no runtime socket inside the container",
+        "rule_ids": [
+          "EA003"
+        ],
+        "cves": []
+      },
+      {
+        "probe_id": "host_pid",
+        "title": "Reach host filesystem through /proc/1/root",
+        "status": "BLOCKED",
+        "evidence": "PID 1 is sleep, 4 processes visible, host process tree not reachable",
+        "rule_ids": [
+          "EA006"
+        ],
+        "cves": []
+      },
+      {
+        "probe_id": "core_pattern",
+        "title": "Host core_pattern writable (host code exec on crash)",
+        "status": "BLOCKED",
+        "evidence": "/proc/sys/kernel/core_pattern is read-only",
+        "rule_ids": [
+          "EA001"
+        ],
+        "cves": [
+          "CVE-2025-31133"
+        ]
+      },
+      {
+        "probe_id": "sysrq",
+        "title": "Host sysrq-trigger writable",
+        "status": "BLOCKED",
+        "evidence": "/proc/sysrq-trigger is not writable",
+        "rule_ids": [
+          "EA001"
+        ],
+        "cves": [
+          "CVE-2025-52881"
+        ]
+      },
+      {
+        "probe_id": "mount",
+        "title": "mount(2) reachable",
+        "status": "PROVEN",
+        "evidence": "mount(2) succeeded for a scratch tmpfs (unmounted)",
+        "rule_ids": [
+          "EA001",
+          "EA002",
+          "EA010"
+        ],
+        "cves": []
+      },
+      {
+        "probe_id": "release_agent",
+        "title": "cgroup v1 release_agent escape reachable",
+        "status": "PROVEN",
+        "evidence": "mounted a fresh cgroup v1 hierarchy, release_agent is writable (classic notify_on_release escape). Not written, unmounted.",
+        "rule_ids": [
+          "EA001",
+          "EA002",
+          "EA012"
+        ],
+        "cves": []
+      },
+      {
+        "probe_id": "raw_disk",
+        "title": "Raw host block device readable",
+        "status": "NA",
+        "evidence": "no host block devices visible",
+        "rule_ids": [
+          "EA001",
+          "EA011"
+        ],
+        "cves": []
+      },
+      {
+        "probe_id": "kernel_module",
+        "title": "Kernel module load capability",
+        "status": "BLOCKED",
+        "evidence": "CAP_SYS_MODULE not effective",
+        "rule_ids": [
+          "EA002"
+        ],
+        "cves": []
+      },
+      {
+        "probe_id": "ld_preload",
+        "title": "LD_PRELOAD present (NVIDIAScape trigger)",
+        "status": "NA",
+        "evidence": "LD_PRELOAD not set",
+        "rule_ids": [
+          "EA017"
+        ],
+        "cves": [
+          "CVE-2025-23266"
+        ]
+      }
+    ],
+    "verdict": "ESCAPABLE",
+    "canaries_cleaned": [],
+    "canaries_left": []
+  }
+}

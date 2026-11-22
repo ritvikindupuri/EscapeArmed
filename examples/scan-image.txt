@@ -1,0 +1,18 @@
+EscapeArmed 0.1.0  container escape readiness report
+
+Targets
+  - image escapearmed-demo:latest
+
+Summary
+  CRITICAL 0  HIGH 0  MEDIUM 1  LOW 0  INFO 0
+
+Findings
+  MEDIUM   EA013 Root in container without user namespace
+           escapearmed-demo:latest: No USER instruction, the image runs as root.
+           CVEs: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881
+           Fix: Run as a non-root USER, and enable user namespaces (rootless Docker, userns-remap, or Kubernetes hostUsers: false).
+
+CVE context
+  - CVE-2025-31133 runc maskedPaths /dev/null symlink race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3.
+  - CVE-2025-52565 runc /dev/console bind mount race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3.
+  - CVE-2025-52881 runc LSM bypass via misdirected procfs writes. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3.

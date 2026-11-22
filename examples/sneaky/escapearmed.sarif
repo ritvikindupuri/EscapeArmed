@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "EscapeArmed",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/ritvikindupuri/EscapeArmed",
+          "rules": [
+            {
+              "id": "EA002",
+              "name": "DangerousLinuxcapabilityadded",
+              "shortDescription": {
+                "text": "Dangerous Linux capability added"
+              },
+              "fullDescription": {
+                "text": "Capabilities such as SYS_ADMIN, SYS_MODULE, DAC_READ_SEARCH, SYS_PTRACE, SYS_RAWIO and BPF each enable a known escape path (mounting, kernel module load, open_by_handle_at, process injection, raw IO, eBPF)."
+              },
+              "help": {
+                "text": "Capabilities such as SYS_ADMIN, SYS_MODULE, DAC_READ_SEARCH, SYS_PTRACE, SYS_RAWIO and BPF each enable a known escape path (mounting, kernel module load, open_by_handle_at, process injection, raw IO, eBPF).\n\nFix: Drop ALL capabilities and add back only what is required. Never add SYS_ADMIN or SYS_MODULE."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA009",
+              "name": "AppArmordisabled(unconfined)",
+              "shortDescription": {
+                "text": "AppArmor disabled (unconfined)"
+              },
+              "fullDescription": {
+                "text": "Without AppArmor the container loses the default deny rules for mount, /proc/sys writes and other escape steps. Note that CVE-2025-52881 shows LSM labels alone are not enough."
+              },
+              "help": {
+                "text": "Without AppArmor the container loses the default deny rules for mount, /proc/sys writes and other escape steps. Note that CVE-2025-52881 shows LSM labels alone are not enough.\n\nFix: Use the default docker-default or runtime/default AppArmor profile.\nCVE-2025-52881: runc LSM bypass via misdirected procfs writes. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape",
+                  "CVE-2025-52881"
+                ]
+              }
+            },
+            {
+              "id": "EA012",
+              "name": "Hostcgroupnamespaceorwritablecgroupfs",
+              "shortDescription": {
+                "text": "Host cgroup namespace or writable cgroupfs"
+              },
+              "fullDescription": {
+                "text": "A host cgroup namespace or writable /sys/fs/cgroup makes the cgroup v1 release_agent escape reachable when combined with SYS_ADMIN."
+              },
+              "help": {
+                "text": "A host cgroup namespace or writable /sys/fs/cgroup makes the cgroup v1 release_agent escape reachable when combined with SYS_ADMIN.\n\nFix: Use a private cgroup namespace (the default on cgroup v2) and never mount cgroupfs read-write."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "5.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA013",
+              "name": "Rootincontainerwithoutusernamespace",
+              "shortDescription": {
+                "text": "Root in container without user namespace"
+              },
+              "fullDescription": {
+                "text": "UID 0 in the container is UID 0 on the host. User namespaces (rootless or userns-remap) are the main mitigation for the November 2025 runc escapes because the remapped root cannot write host procfs files."
+              },
+              "help": {
+                "text": "UID 0 in the container is UID 0 on the host. User namespaces (rootless or userns-remap) are the main mitigation for the November 2025 runc escapes because the remapped root cannot write host procfs files.\n\nFix: Run as a non-root USER, and enable user namespaces (rootless Docker, userns-remap, or Kubernetes hostUsers: false).\nCVE-2025-31133: runc maskedPaths /dev/null symlink race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-9493-h29p-rfm2\nCVE-2025-52565: runc /dev/console bind mount race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-qw9x-cqr3-wc7r\nCVE-2025-52881: runc LSM bypass via misdirected procfs writes. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "5.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape",
+                  "CVE-2025-31133",
+                  "CVE-2025-52565",
+                  "CVE-2025-52881"
+                ]
+              }
+            },
+            {
+              "id": "EA014",
+              "name": "no-new-privilegesnotset",
+              "shortDescription": {
+                "text": "no-new-privileges not set"
+              },
+              "fullDescription": {
+                "text": "Setuid binaries inside the container can still raise privileges."
+              },
+              "help": {
+                "text": "Setuid binaries inside the container can still raise privileges.\n\nFix: Set security_opt: no-new-privileges:true or allowPrivilegeEscalation: false."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "security-severity": "3.0",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA023",
+              "name": "Runtimesocketwritablebynon-rootonhost",
+              "shortDescription": {
+                "text": "Runtime socket writable by non-root on host"
+              },
+              "fullDescription": {
+                "text": "The Docker socket on the host is group or world writable. Any member of that group is effectively root."
+              },
+              "help": {
+                "text": "The Docker socket on the host is group or world writable. Any member of that group is effectively root.\n\nFix: Restrict socket permissions and audit the docker group, or use rootless Docker."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape"
+                ]
+              }
+            },
+            {
+              "id": "EA024",
+              "name": "Hostdaemonhasnousernamespaceisolation",
+              "shortDescription": {
+                "text": "Host daemon has no user namespace isolation"
+              },
+              "fullDescription": {
+                "text": "The container engine runs rootful without userns-remap, so container root maps to host root for every workload."
+              },
+              "help": {
+                "text": "The container engine runs rootful without userns-remap, so container root maps to host root for every workload.\n\nFix: Enable userns-remap or run rootless Docker or Podman.\nCVE-2025-31133: runc maskedPaths /dev/null symlink race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-9493-h29p-rfm2\nCVE-2025-52565: runc /dev/console bind mount race. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-qw9x-cqr3-wc7r\nCVE-2025-52881: runc LSM bypass via misdirected procfs writes. Fixed in runc 1.2.8, 1.3.3, 1.4.0-rc.3. https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "5.5",
+                "tags": [
+                  "security",
+                  "container",
+                  "container-escape",
+                  "CVE-2025-31133",
+                  "CVE-2025-52565",
+                  "CVE-2025-52881"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EA002",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "Dangerous Linux capability added: CAP_SYS_ADMIN added: mount, cgroup release_agent, many kernel interfaces."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-sneaky"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "9.5",
+            "target": "ea-sneaky",
+            "proof": "PROVEN"
+          }
+        },
+        {
+          "ruleId": "EA009",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "AppArmor disabled (unconfined): AppArmor profile is unconfined. Related: CVE-2025-52881."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-sneaky"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "target": "ea-sneaky",
+            "proof": "NOT_TESTED"
+          }
+        },
+        {
+          "ruleId": "EA012",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "Host cgroup namespace or writable cgroupfs: Host cgroup namespace plus SYS_ADMIN makes release_agent reachable."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-sneaky"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "8.0",
+            "target": "ea-sneaky",
+            "proof": "PROVEN"
+          }
+        },
+        {
+          "ruleId": "EA013",
+          "ruleIndex": 3,
+          "level": "warning",
+          "message": {
+            "text": "Root in container without user namespace: Process runs as UID 0. Related: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-sneaky"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "target": "ea-sneaky",
+            "proof": "NOT_TESTED"
+          }
+        },
+        {
+          "ruleId": "EA014",
+          "ruleIndex": 4,
+          "level": "note",
+          "message": {
+            "text": "no-new-privileges not set: no-new-privileges is not set."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/ea-sneaky"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "3.0",
+            "target": "ea-sneaky",
+            "proof": "NOT_TESTED"
+          }
+        },
+        {
+          "ruleId": "EA024",
+          "ruleIndex": 6,
+          "level": "warning",
+          "message": {
+            "text": "Host daemon has no user namespace isolation: Docker daemon runs rootful without userns-remap. Related: CVE-2025-31133, CVE-2025-52565, CVE-2025-52881."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/kali"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "target": "kali",
+            "proof": "NOT_TESTED"
+          }
+        },
+        {
+          "ruleId": "EA023",
+          "ruleIndex": 5,
+          "level": "warning",
+          "message": {
+            "text": "Runtime socket writable by non-root on host: /var/run/docker.sock is writable by group docker (op2rfrc8). Each member is effectively root."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "container/kali"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "security-severity": "5.5",
+            "target": "kali",
+            "proof": "NOT_TESTED"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+services:
+  agent:
+    image: debian:bookworm-slim
+    privileged: true
+    pid: host
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:ro
+      - /etc:/hostetc
+  gpu:
+    image: ghcr.io/example/trainer:latest
+    environment:
+      LD_PRELOAD: /tmp/x.so
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  web:
+    image: nginx:1.27
+    user: "101"
+    cap_drop: [ALL]
+    cap_add: [SYS_ADMIN]
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined

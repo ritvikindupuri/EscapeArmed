@@ -1,0 +1,38 @@
+[demo] building escapearmed-demo:latest
+[demo] starting containers
+NAMES         IMAGE                     STATUS
+ea-sneaky     escapearmed-demo:latest   Up 1 second
+ea-hardened   escapearmed-demo:latest   Up 2 seconds
+ea-vulnapp    escapearmed-demo:latest   Up 5 seconds
+[demo] static scans
+[demo] active proof against the vulnerable container
+!! EscapeArmed ACTIVE MODE !!
+You are about to run canary probes inside container: ea-vulnapp
+  - probes run as the container user (root) inside the container with `docker exec`
+  - they only read, test write access, mount and unmount scratch filesystems,
+    and write one canary file per writable host bind mount, removed afterwards
+  - nothing is written to core_pattern, sysrq-trigger, release_agent or modules
+  - only run this against containers you own and have permission to test
+[escapearmed] wrote report.txt, report.json, escapearmed.sarif, kyverno-policy.yaml, falco-rules.yaml to examples/vulnapp
+[demo] active proof against the hardened container
+!! EscapeArmed ACTIVE MODE !!
+You are about to run canary probes inside container: ea-hardened
+  - probes run as the container user (10001:10001) inside the container with `docker exec`
+  - they only read, test write access, mount and unmount scratch filesystems,
+    and write one canary file per writable host bind mount, removed afterwards
+  - nothing is written to core_pattern, sysrq-trigger, release_agent or modules
+  - only run this against containers you own and have permission to test
+[escapearmed] wrote report.txt, report.json, escapearmed.sarif, kyverno-policy.yaml, falco-rules.yaml to examples/hardened
+[demo] active proof against the 'not privileged' container
+!! EscapeArmed ACTIVE MODE !!
+You are about to run canary probes inside container: ea-sneaky
+  - probes run as the container user (root) inside the container with `docker exec`
+  - they only read, test write access, mount and unmount scratch filesystems,
+    and write one canary file per writable host bind mount, removed afterwards
+  - nothing is written to core_pattern, sysrq-trigger, release_agent or modules
+  - only run this against containers you own and have permission to test
+[escapearmed] wrote report.txt, report.json, escapearmed.sarif, kyverno-policy.yaml, falco-rules.yaml to examples/sneaky
+[demo] checking for leftover canaries on the host
+no canary files left in /tmp/escapearmed-demo-share
+no escapearmed mounts left on the host
+[demo] done, see examples/

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: seccomp-unconfined
+spec:
+  hostUsers: false
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: debian:bookworm-slim
+    securityContext:
+      allowPrivilegeEscalation: false
+      runAsUser: 10001
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: Unconfined
